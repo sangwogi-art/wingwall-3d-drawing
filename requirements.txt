@@ -1,0 +1,5 @@
+ezdxf>=1.4.3
+ezdwg>=0.16.3
+flask>=3.0.0
+flask-cors>=4.0.0
+numpy>=1.24.0
