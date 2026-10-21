@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DWG 도면 기반 암거 및 날개벽 3D 외형·배근 통합 모델러</title>
+  <link rel="stylesheet" href="static/css/style.css">
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header>
+    <div class="brand">
+      <div class="logo-icon">3D</div>
+      <div>
+        <h1>암거 및 날개벽 3D 외형·배근 모델러</h1>
+        <div style="font-size: 11px; color: var(--text-muted);" id="header-subtitle">도면을 불러와주세요 (1단계)</div>
+      </div>
+    </div>
+
+    <!-- 3-Step Workflow Stepper -->
+    <div class="workflow-stepper" id="workflow-stepper">
+      <button class="step-pill active" data-step="1" id="step-btn-1">
+        <span class="step-num">1</span>
+        <div class="step-text">
+          <span class="step-title">1단계: 도면 불러오기</span>
+          <span class="step-sub" id="step1-sub-badge">도면 확인 및 종류 판별</span>
+        </div>
+      </button>
+      <span class="step-arrow">▸</span>
+      <button class="step-pill" data-step="2" id="step-btn-2">
+        <span class="step-num">2</span>
+        <div class="step-text">
+          <span class="step-title">2단계: 외형 모델링</span>
+          <span class="step-sub">일반도 전용 3D 솔리드</span>
+        </div>
+      </button>
+      <span class="step-arrow">▸</span>
+      <button class="step-pill" data-step="3" id="step-btn-3">
+        <span class="step-num">3</span>
+        <div class="step-text">
+          <span class="step-title">3단계: 철근 배근</span>
+          <span class="step-sub">배근도 기반 3D 철근</span>
+        </div>
+      </button>
+    </div>
+
+    <!-- Center View & Display Mode Controls (Active in Steps 2 & 3) -->
+    <div style="display:flex; align-items:center; gap:8px;" id="header-mode-controls">
+      <div class="segmented-control" id="view-mode-group">
+        <button class="segmented-btn active" data-view-mode="3d" id="btn-view-3d">3D 뷰어</button>
+        <button class="segmented-btn" data-view-mode="2d" id="btn-view-2d">2D 도면</button>
+        <button class="segmented-btn" data-view-mode="split" id="btn-view-split">분할</button>
+      </div>
+
+      <div class="segmented-control" id="display-mode-group">
+        <button class="segmented-btn active" data-display-mode="solid" title="솔리드">솔리드</button>
+        <button class="segmented-btn" data-display-mode="wireframe" title="와이어프레임">와이어</button>
+        <button class="segmented-btn" data-display-mode="transparent" title="X-Ray">X-Ray</button>
+      </div>
+    </div>
+
+    <!-- Header Actions -->
+    <div class="header-tools">
+      <input type="file" id="file-upload" accept=".dwg,.dxf,.DWG,.DXF" multiple style="display: none;">
+      <button class="btn" id="btn-header-file-open" title="도면 파일 불러오기 (.dwg, .dxf)">
+        📂 도면 열기
+      </button>
+
+      <div class="dropdown">
+        <button class="btn btn-primary" id="btn-export-dropdown">
+          💾 내보내기 ▾
+        </button>
+        <div class="dropdown-menu" id="export-menu">
+          <a href="#" class="dropdown-item" data-export-fmt="obj">📦 Wavefront OBJ (.obj)</a>
+          <a href="#" class="dropdown-item" data-export-fmt="stl">🖨 3D STL (.stl)</a>
+          <a href="#" class="dropdown-item" data-export-fmt="dxf">📐 AutoCAD 3D DXF (.dxf)</a>
+          <a href="#" class="dropdown-item" data-export-fmt="csv">📋 철근 재료표 CSV (.csv)</a>
+          <a href="#" class="dropdown-item" data-export-fmt="json">📊 제원 JSON (.json)</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace Container -->
+  <div class="app-container step-1-mode" id="app-container">
+
+    <!-- ==================== LEFT SIDEBAR / COLUMN ==================== -->
+    <aside class="sidebar sidebar-left" id="sidebar-left">
+
+      <!-- [STEP 1 LEFT COLUMN] 1단계: 도면 불러오기 및 도면 종류 판별 -->
+      <div class="step-sidebar-pane active" id="left-pane-step-1">
+        <div class="step1-header-simple">
+          <h2>1단계: 도면 불러오기 및 종류 판별</h2>
+        </div>
+
+        <div class="step1-content-simple">
+          <!-- 1.1 도면 파일 불러오기 영역 -->
+          <div class="panel-section">
+            <div class="upload-dropzone-simple" id="step1-dropzone">
+              <div style="font-size:26px; margin-bottom:4px;">📂</div>
+              <div style="font-size:13px; font-weight:700; color:var(--text-primary);">도면 파일 불러오기</div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">클릭 또는 파일을 여기에 드래그 (.dwg, .dxf)</div>
+            </div>
+            <div style="margin-top:8px;">
+              <button class="btn btn-sm btn-primary" id="btn-select-file" type="button" style="width:100%; justify-content:center; padding:7px 12px; font-size:12px;">
+                📂 도면 파일 선택 (.dwg, .dxf)
+              </button>
+            </div>
+          </div>
+
+          <!-- 1.2 불러온 도면 목록 및 종류 판별 -->
+          <div class="panel-section step1-list-section">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <h3 style="margin:0;">불러온 도면 목록</h3>
+              <span style="font-size:11px; color:var(--text-muted);" id="step1-total-count">0개</span>
+            </div>
+
+            <!-- List of Drawing Cards -->
+            <div id="step1-drawings-list" class="step1-drawings-scroll">
+              <!-- Empty state initially -->
+            </div>
+
+            <!-- Step 1 Bottom Action Area -->
+            <div id="step1-action-area" style="margin-top:10px;">
+              <!-- Proceed button rendered when drawings exist -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- [STEP 2 LEFT SIDEBAR] 2단계: 일반도 기반 외형 모델링 (심플 UI) -->
+      <div class="step-sidebar-pane" id="left-pane-step-2">
+        <div class="step2-header-simple">
+          <h2>2단계: 일반도 기반 3D 외형 모델링</h2>
+        </div>
+
+        <div class="step2-content-simple" style="gap:10px;">
+          <!-- 2.1 적용 일반도 정보 & 체적 한눈에 보기 요약 바 -->
+          <div id="step2-general-dwg-card"></div>
+
+          <!-- 2.2 평면도 암거·날개벽 판별 현황 (심플 미니 매트릭스) -->
+          <div class="panel-section" style="margin-bottom:0; padding:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <h3 style="margin:0; font-size:12px;">평면도 부재 판별</h3>
+              <span class="badge" id="step2-detection-badge" style="background:rgba(16,185,129,0.18); color:#34d399;">판별 완료</span>
+            </div>
+            <div id="step2-detection-card"></div>
+          </div>
+
+          <!-- 2.3 생성된 3D 구조물 목록 -->
+          <div class="panel-section" style="flex:1; display:flex; flex-direction:column; min-height:0; margin-bottom:0; padding:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+              <h3 style="margin:0; font-size:12px;">3D 구조물 목록</h3>
+              <span style="font-size:10px; color:var(--text-muted);">부재 클릭 시 강조</span>
+            </div>
+            <div id="step2-structures-list" class="step2-structures-scroll" style="gap:6px;"></div>
+          </div>
+
+          <!-- 2.4 다음 단계(3단계: 철근 배근) 이동 버튼 -->
+          <div style="margin-top:auto; padding-top:4px;">
+            <button class="btn btn-primary" style="width:100%; justify-content:center; padding:9px 12px; font-size:12px; font-weight:700;" id="btn-goto-step3">
+              3단계: 배근도 기반 철근 배근 진행 ➔
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- [STEP 3 LEFT SIDEBAR] 3단계: 배근도를 이용한 날개벽 내부 철근 배근 -->
+      <div class="step-sidebar-pane" id="left-pane-step-3">
+        <div class="sidebar-header-banner step3-banner">
+          <div style="font-weight:700; font-size:12px;">3단계: 배근도 기반 날개벽 3D 철근 배근</div>
+          <div style="font-size:10px; color:var(--text-secondary); margin-top:2px;" id="step3-source-summary">
+            배근도/구조도를 이용하여 날개벽 내부에 철근을 배근합니다.
+          </div>
+        </div>
+
+        <div class="sidebar-tabs">
+          <button class="tab-btn active" data-tab="tab-rebar-filter">배근도 & 부위필터</button>
+          <button class="tab-btn" data-tab="tab-rebar-marks" id="tab-rebar-marks-btn">철근 기호</button>
+          <button class="tab-btn" data-tab="tab-rebar-diag">수량 & 품질검증</button>
+        </div>
+
+        <div class="tab-content active" id="tab-rebar-filter">
+          <div class="panel-section">
+            <h3><span>적용된 배근도/구조도</span><span class="badge" style="background:rgba(16,185,129,0.18); color:#34d399;">배근도</span></h3>
+            <div id="step3-rebar-dwgs-list"></div>
+          </div>
+
+          <div class="panel-section">
+            <h3>대상 날개벽 필터</h3>
+            <div class="mini-filter-tabs" id="step3-ww-filter">
+              <button class="mini-tab active" data-ww="ALL" id="btn-ww-filter-all">전체</button>
+              <button class="mini-tab" data-ww="WW_END_LEFT" id="btn-ww-filter-left">종점 좌</button>
+              <button class="mini-tab" data-ww="WW_END_RIGHT" id="btn-ww-filter-right">종점 우</button>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <h3>직경별 표시 제어</h3>
+            <div id="step3-dia-filters" class="layer-list"></div>
+          </div>
+
+          <div class="panel-section">
+            <h3>부위별 표시 제어</h3>
+            <div id="step3-zone-filters" class="layer-list"></div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="tab-rebar-marks">
+          <div class="panel-section">
+            <h3><span>기호별 3D 철근</span><span style="font-size:10px; color:var(--text-muted);">클릭 시 하이라이트</span></h3>
+            <div id="step3-marks-list"></div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="tab-rebar-diag">
+          <div class="panel-section">
+            <h3>철근 총괄 집계 (SD400 / fy=500MPa)</h3>
+            <div class="meta-grid" id="rebar-weight-summary"></div>
+            <button class="btn btn-primary btn-sm" style="width:100%; justify-content:center; margin-top:8px;" onclick="window.app.openBomModal()">
+              📊 전체 철근 재료표(BOM) 열기
+            </button>
+          </div>
+
+          <div class="panel-section">
+            <h3>배근 품질 검증</h3>
+            <div id="rebar-diag-list"></div>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ==================== CENTER / RIGHT VIEWPORT ==================== -->
+    <main class="viewport-container" id="viewport-container">
+
+      <!-- Top Bar inside Viewport: Active Drawing Switcher Tabs -->
+      <div class="viewport-top-bar" id="viewport-top-bar">
+        <div class="viewport-step-indicator" id="viewport-step-indicator"></div>
+        <div class="viewport-drawing-tabs" id="viewport-drawing-tabs"></div>
+      </div>
+
+      <div class="viewport-panes-wrapper">
+        <!-- 3D Viewport Pane -->
+        <div class="view-pane" id="viewport-3d" style="display:none;">
+          <div class="viewport-overlay" id="overlay-3d-legend"></div>
+
+          <div class="viewport-controls-bottom">
+            <button class="view-hud-btn" id="btn-fit-3d" title="카메라 위치를 모델 전체에 맞춤">⛶ 전체 보기</button>
+            <button class="view-hud-btn" onclick="window.app.viewer3d.camera.position.set(16, 10, 36); window.app.viewer3d.controls.update();">정면 뷰</button>
+            <button class="view-hud-btn" onclick="window.app.viewer3d.camera.position.set(16, 41, 65); window.app.viewer3d.controls.update();">평면 뷰</button>
+            <button class="view-hud-btn" onclick="window.app.viewer3d.camera.position.set(45, 41, 36); window.app.viewer3d.controls.update();">측면 뷰</button>
+          </div>
+        </div>
+
+        <!-- 2D CAD Viewport Pane -->
+        <div class="view-pane" id="viewport-2d" style="display:block;">
+          <canvas id="cad-canvas"></canvas>
+
+          <!-- Empty Canvas Overlay for Step 1 when no files loaded -->
+          <div class="canvas-empty-overlay" id="canvas-empty-overlay" style="display:flex;">
+            <div style="font-size:36px; margin-bottom:10px; color:#475569;">📐</div>
+            <div style="font-size:14px; font-weight:700; color:var(--text-secondary);">도면 뷰어</div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">불러온 도면이 없습니다. 좌측에서 도면 파일을 불러와주세요.</div>
+          </div>
+
+          <div class="viewport-overlay" id="overlay-2d-info" style="display:none;">
+            <div class="overlay-chip" id="overlay-2d-title">2D CAD 도면</div>
+          </div>
+          <div class="viewport-controls-bottom" id="viewport-2d-controls" style="display:none;">
+            <button class="view-hud-btn" id="btn-fit-2d">⛶ 도면 전체보기</button>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ==================== RIGHT SIDEBAR (Steps 2 & 3 only) ==================== -->
+    <aside class="sidebar sidebar-right" id="sidebar-right">
+      <div class="sidebar-tabs">
+        <button class="tab-btn active" id="right-sidebar-title" style="cursor:default;">부재 속성 및 제원</button>
+      </div>
+
+      <div class="tab-content active" id="properties-container" style="display:block;"></div>
+    </aside>
+
+  </div>
+
+  <!-- ==================== BAR BENDING SCHEDULE (철근 재료표) MODAL ==================== -->
+  <div id="bom-modal" class="modal-backdrop" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 style="font-size:14px; font-weight:700;">📊 날개벽 철근 재료표 (Bar Bending Schedule)</h2>
+          <div style="font-size:11px; color:var(--text-secondary); margin-top:2px;" id="bom-modal-subtitle">
+            종점부 날개벽 | fck=30MPa, fy=400~500MPa (SD400)
+          </div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="btn btn-sm btn-primary" onclick="window.app.exportModel('csv')">📥 엑셀 CSV 다운로드</button>
+          <button class="btn btn-sm" onclick="window.app.closeBomModal()">✕ 닫기</button>
+        </div>
+      </div>
+      <div class="modal-body" id="bom-modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" style="display:none; position:fixed; inset:0; background:rgba(14,17,24,0.85); backdrop-filter:blur(6px); z-index:9999; justify-content:center; align-items:center; flex-direction:column; gap:12px;">
+    <div style="width:36px; height:36px; border:3px solid var(--border-color); border-top-color:var(--accent-color); border-radius:50%; animation:spin 0.8s linear infinite;"></div>
+    <div style="font-size:13px; font-weight:600; color:var(--text-primary);" id="loading-text">도면 파일 처리 중...</div>
+  </div>
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+
+  <!-- Scripts -->
+  <script src="static/libs/three.min.js"></script>
+  <script>
+    if (typeof THREE === 'undefined') {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
+    }
+  </script>
+
+  <script src="static/libs/OrbitControls.js"></script>
+  <script>
+    if (typeof THREE.OrbitControls === 'undefined') {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"><\/script>');
+    }
+  </script>
+
+  <!-- Pre-bundled Datasets for Offline Standalone Running -->
+  <script src="static/data/drawing_data.js"></script>
+  <script src="static/data/model_3d.js"></script>
+
+  <!-- Application Logic -->
+  <script src="static/js/viewer3d.js"></script>
+  <script src="static/js/cad2d.js"></script>
+  <script src="static/js/app.js"></script>
+
+</body>
+</html>
