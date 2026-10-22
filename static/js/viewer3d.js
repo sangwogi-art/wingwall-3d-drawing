@@ -682,8 +682,8 @@ class Viewer3D {
         // 암거본체 선택 시 날개벽 구조물의 이름만 표시 (Requirement 2.2.2 & 3.2.2)
         sp.visible = true;
       } else {
-        // 특정 날개벽 선택 시 해당 날개벽 이름만 표시
-        sp.visible = (sp.userData.wingwallId === currentFocus);
+        // 특정 날개벽 선택 시: 2단계에서는 치수선 가독성을 위해 숨김, 3단계에서는 선택된 날개벽 이름 표시
+        sp.visible = (this.stepMode === 3 && sp.userData.wingwallId === currentFocus);
       }
     }
   }
@@ -758,7 +758,7 @@ class Viewer3D {
     this.updateWingwallNameSpritesVisibility();
   }
 
-  // Requirement 3: 선택된 날개벽 치수(시작단면 높이, 종점단면 높이, 날개벽 연장) 3D 치수선 및 라벨 생성
+  // Requirement 1 & 2 & 3 & 4: 선택된 날개벽 치수(시작단면 높이, 종점단면 높이, 날개벽 수평연장) 흰색 3D 치수선 및 간소화 라벨 표출
   showWingwallDimensions(wingwallId) {
     this.clearDimensionAnnotations();
     if (!wingwallId || wingwallId === 'CULVERT') return;
@@ -769,13 +769,6 @@ class Viewer3D {
     const wwData = isLeft
       ? (objects.ww_end_left || objects.ww_left)
       : (objects.ww_end_right || objects.ww_right);
-
-    const dim = wwData?.dimensions || {};
-    const lengthVal = dim.length ?? (isLeft ? 4.35 : 5.40);
-    const hStartVal = dim.total_height_start ?? 3.70;
-    const hEndVal = dim.total_height_end ?? 1.50;
-
-    const colorHex = isLeft ? 0x38bdf8 : 0xfbbf24;
 
     let pStartBot, pStartTop, pEndBot, pEndTop;
     const sec = wwData?.sections_3d || {};
@@ -816,6 +809,12 @@ class Viewer3D {
       }
     }
 
+    // 실제 3D 모델링 기하 좌표로부터 치수값 정밀 산출 (Requirement 5: 임의 고정값 배제)
+    const hStartVal = Math.abs(pStartTop.z - pStartBot.z);
+    const hEndVal = Math.abs(pEndTop.z - pEndBot.z);
+    // 시작단면과 종점단면 사이의 수평거리를 날개벽 연장으로 정의 (Requirement 2)
+    const lengthVal = Math.hypot(pEndTop.x - pStartTop.x, pEndTop.y - pStartTop.y);
+
     // 벽체 연장 축 (XY 평면)
     const vWall = new THREE.Vector3(pEndTop.x - pStartTop.x, pEndTop.y - pStartTop.y, 0);
     const uWall = vWall.clone().normalize();
@@ -825,45 +824,101 @@ class Viewer3D {
       ? new THREE.Vector3(-uWall.y, uWall.x, 0).normalize()
       : new THREE.Vector3(uWall.y, -uWall.x, 0).normalize();
 
-    // 1. 시작단면 높이 치수선 및 라벨 (H = 3.70m)
+    // 1. 시작단면 높이 치수선 (외측 법선 방향 배치, H=00.0m) - Requirement 3 & 4
     this.createDimension3D(
       pStartBot,
       pStartTop,
       nWall,
-      0.55,
-      `시작단면 H = ${hStartVal.toFixed(2)}m`,
-      colorHex
+      0.60,
+      `H=${hStartVal.toFixed(2)}m`
     );
 
-    // 2. 종점단면 높이 치수선 및 라벨 (H = 1.50m)
+    // 2. 종점단면 높이 치수선 (종점 축 외측 방향 배치, H=00.0m) - Requirement 3 & 4
     this.createDimension3D(
       pEndBot,
       pEndTop,
       uWall,
-      0.55,
-      `종점단면 H = ${hEndVal.toFixed(2)}m`,
-      colorHex
+      0.60,
+      `H=${hEndVal.toFixed(2)}m`
     );
 
-    // 3. 날개벽 연장 치수선 및 라벨 (L = 4.35m / 5.40m)
-    this.createDimension3D(
+    // 3. 날개벽 연장 수평 치수선 (경사가 아닌 수평 방향 배치, L=00.0m) - Requirement 2 & 3 & 4
+    this.createHorizontalDimension3D(
       pStartTop,
       pEndTop,
-      new THREE.Vector3(0, 0, 1),
-      0.65,
-      `날개벽 연장 L = ${lengthVal.toFixed(2)}m`,
-      colorHex
+      nWall,
+      0.20,
+      `L=${lengthVal.toFixed(2)}m`
     );
   }
 
-  createDimension3D(p1, p2, offsetDir, offsetDist, text, colorHex) {
+  // Requirement 2: 날개벽 연장 수평 치수선 (동일 Z 높이 수평 배치로 경사/기울어짐 방지)
+  createHorizontalDimension3D(p1, p2, normalDir, normalDist, text) {
+    const zDim = Math.max(p1.z, p2.z) + 0.60;
+    const offH = (normalDir && normalDist)
+      ? normalDir.clone().normalize().multiplyScalar(normalDist)
+      : new THREE.Vector3(0, 0, 0);
+
+    const startBase = new THREE.Vector3(p1.x + offH.x, p1.y + offH.y, p1.z);
+    const endBase = new THREE.Vector3(p2.x + offH.x, p2.y + offH.y, p2.z);
+
+    // 치수선의 양 끝단 Z 좌표를 zDim으로 일치시켜 완벽한 수평 보장
+    const d1 = new THREE.Vector3(startBase.x, startBase.y, zDim);
+    const d2 = new THREE.Vector3(endBase.x, endBase.y, zDim);
+
+    const linePoints = [];
+
+    // 보조선 (Extension Lines): 각 단면 상단 기준점에서 수평 치수선 높이까지 수직 연장
+    const overshoot = 0.15;
+    linePoints.push(startBase.clone(), new THREE.Vector3(d1.x, d1.y, zDim + overshoot));
+    linePoints.push(endBase.clone(), new THREE.Vector3(d2.x, d2.y, zDim + overshoot));
+
+    // 치수선 (Horizontal Dimension Line)
+    linePoints.push(d1.clone(), d2.clone());
+
+    // 끝단 틱 마커 (End Ticks): 수평 치수선에 직교하는 수직 틱
+    const tickLen = 0.14;
+    linePoints.push(
+      new THREE.Vector3(d1.x, d1.y, zDim - tickLen),
+      new THREE.Vector3(d1.x, d1.y, zDim + tickLen)
+    );
+    linePoints.push(
+      new THREE.Vector3(d2.x, d2.y, zDim - tickLen),
+      new THREE.Vector3(d2.x, d2.y, zDim + tickLen)
+    );
+
+    const geom = new THREE.BufferGeometry().setFromPoints(linePoints);
+    const mat = new THREE.LineBasicMaterial({
+      color: 0xffffff, // Requirement 4: 모든 치수선 흰색
+      linewidth: 2,
+      depthTest: false,
+      transparent: true,
+      opacity: 0.95
+    });
+    const lineSegs = new THREE.LineSegments(geom, mat);
+    lineSegs.renderOrder = 999;
+    this.dimensionGroup.add(lineSegs);
+
+    // 치수값 텍스트 라벨 (수평 치수선 상단 중앙 배치)
+    const mid = new THREE.Vector3().addVectors(d1, d2).multiplyScalar(0.5);
+    const spritePos = new THREE.Vector3(mid.x, mid.y, zDim + 0.28);
+
+    const sprite = this.createDimensionTextSprite(text);
+    sprite.position.copy(spritePos);
+    sprite.renderOrder = 1000;
+    this.scene.add(sprite);
+    this.dimensionSprites.push(sprite);
+  }
+
+  // 높이 측정용 3D 치수선 생성 (Requirement 3 & 4: 흰색 치수선 및 간소화 표기)
+  createDimension3D(p1, p2, offsetDir, offsetDist, text) {
     const off = offsetDir.clone().normalize().multiplyScalar(offsetDist);
     const d1 = p1.clone().add(off);
     const d2 = p2.clone().add(off);
 
     const linePoints = [];
 
-    // 보조선 (Extension Lines from geometry to dimension line)
+    // 보조선 (Extension Lines)
     const extOver = offsetDir.clone().normalize().multiplyScalar(0.15);
     linePoints.push(p1.clone(), d1.clone().add(extOver));
     linePoints.push(p2.clone(), d2.clone().add(extOver));
@@ -871,7 +926,7 @@ class Viewer3D {
     // 치수선 (Main Dimension Line)
     linePoints.push(d1.clone(), d2.clone());
 
-    // 끝단 틱 표시 (End Ticks: 시작점과 끝점 및 측정 방향 표시)
+    // 끝단 틱 표시 (End Ticks)
     const dimDir = new THREE.Vector3().subVectors(d2, d1).normalize();
     let tickDir = new THREE.Vector3().crossVectors(dimDir, offsetDir).normalize();
     if (tickDir.lengthSq() < 0.01) {
@@ -883,7 +938,7 @@ class Viewer3D {
 
     const geom = new THREE.BufferGeometry().setFromPoints(linePoints);
     const mat = new THREE.LineBasicMaterial({
-      color: colorHex,
+      color: 0xffffff, // Requirement 4: 모든 치수선 흰색
       linewidth: 2,
       depthTest: false,
       transparent: true,
@@ -893,39 +948,41 @@ class Viewer3D {
     lineSegs.renderOrder = 999;
     this.dimensionGroup.add(lineSegs);
 
-    // 치수값 텍스트 라벨 (중앙에 가독성 높게 배치)
+    // 치수값 텍스트 라벨 (치수선 외측 중앙에 명확히 대응되도록 배치)
     const mid = new THREE.Vector3().addVectors(d1, d2).multiplyScalar(0.5);
-    const spritePos = mid.clone().addScaledVector(offsetDir.clone().normalize(), 0.35);
+    const spritePos = mid.clone().addScaledVector(offsetDir.clone().normalize(), 0.32);
 
-    const sprite = this.createDimensionTextSprite(text, colorHex);
+    const sprite = this.createDimensionTextSprite(text);
     sprite.position.copy(spritePos);
     sprite.renderOrder = 1000;
     this.scene.add(sprite);
     this.dimensionSprites.push(sprite);
   }
 
-  createDimensionTextSprite(text, colorHex) {
+  // Requirement 3 & 4: 사각형 테이블(배경 박스 및 테두리) 삭제, 순수 흰색 치수값 텍스트 생성
+  createDimensionTextSprite(text) {
     const canvas = document.createElement('canvas');
-    canvas.width = 340;
-    canvas.height = 68;
+    canvas.width = 256;
+    canvas.height = 64;
     const ctx = canvas.getContext('2d');
 
-    // 반투명 다크 배경 필
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
-    ctx.roundRect ? ctx.roundRect(4, 4, 332, 60, 8) : ctx.fillRect(4, 4, 332, 60);
-    ctx.fill();
+    // 투명 배경 (사각형 박스 및 테두리 완전 삭제)
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 부재 강조 색상 테두리
-    ctx.strokeStyle = '#' + new THREE.Color(colorHex).getHexString();
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    // 선명한 화이트 볼드 텍스트
-    ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 22px "Segoe UI", Roboto, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, 170, 34);
+
+    // 3D 뷰포트에서 배경/모델 색상과 무관하게 글자가 또렷이 식별되도록 글자 자체에 미세한 다크 외곽선 적용
+    ctx.strokeStyle = 'rgba(15, 23, 42, 0.90)';
+    ctx.lineWidth = 3.5;
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    ctx.strokeText(text, 128, 32);
+
+    // 치수값 흰색 표시
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, 128, 32);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.minFilter = THREE.LinearFilter;
@@ -935,8 +992,8 @@ class Viewer3D {
       transparent: true
     });
     const sprite = new THREE.Sprite(spriteMat);
-    sprite.scale.set(3.4, 0.68, 1);
-    sprite.userData.aspect = 340 / 68;
+    sprite.scale.set(2.8, 0.7, 1);
+    sprite.userData.aspect = 256 / 64; // 4.0
     return sprite;
   }
 
