@@ -1270,7 +1270,13 @@ class WingwallApp {
         <text x="140" y="34" fill="#e2e8f0" font-size="11" text-anchor="middle">a = ${p.a} m (2Cycle 보강)</text>
         <text x="250" y="75" fill="#94a3b8" font-size="10" text-anchor="middle">b=${p.b}</text>
       `;
-    } else if (st === 'STEM_VERTICAL_FRONT' || st === 'STEM_VERTICAL_BACK') {
+    } else if (st === 'STEM_VERTICAL_FRONT') {
+      svgBody = `
+        <polyline points="85,105 155,105 155,20" fill="none" stroke="${col}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="120" y="120" fill="#94a3b8" font-size="10" text-anchor="middle">저판하면 ${p.b || '200'}mm</text>
+        <text x="208" y="65" fill="#e2e8f0" font-size="11" text-anchor="middle">벽체부 ${p.a} m</text>
+      `;
+    } else if (st === 'STEM_VERTICAL_BACK') {
       svgBody = `
         <polyline points="85,105 155,105 162,20" fill="none" stroke="${col}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
         <text x="120" y="120" fill="#94a3b8" font-size="10" text-anchor="middle">기초정착 ${p.c || p.a}mm</text>

@@ -118,6 +118,19 @@ class Test3DDrawingPipeline(unittest.TestCase):
         self.assertEqual(left_bars, 231)
         self.assertEqual(right_bars, 277)
 
+        # W1 철근 3D 형상 검증: 벽체-저판 접합부에서 꺾이지 않고 저판 하면에서 1회만 꺾이는 ㄱ자 형상(3개 정점) 확인
+        for ww_key in ['WW_END_LEFT', 'WW_END_RIGHT']:
+            ww_groups = rebar_data['wingwalls'][ww_key]['groups']
+            w1_group = next((g for g in ww_groups if g['mark'] == 'W1'), None)
+            self.assertIsNotNone(w1_group)
+            for poly in w1_group['polylines']:
+                self.assertEqual(len(poly), 3, f"{ww_key} W1 bar must have 3 points (1 bend at footing bottom)")
+                # 저판 하면 구간(poly[0] -> poly[1]) 동일 Z 표고 유지
+                self.assertAlmostEqual(poly[0][2], poly[1][2], places=4)
+                # 벽체 긴 구간(poly[1] -> poly[2]) 접합부 꺾임 없이 일직선 연장 확인
+                self.assertAlmostEqual(poly[1][0], poly[2][0], places=4)
+                self.assertAlmostEqual(poly[1][1], poly[2][1], places=4)
+
     def test_05_exporters(self):
         """3D 모델 OBJ, STL, DXF 내보내기 검증"""
         model_res = model_3d.generate_full_model()

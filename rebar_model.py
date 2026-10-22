@@ -275,10 +275,11 @@ def generate_wingwall_rebars(side='LEFT', custom_params=None, culvert_params=Non
                 to_world(s, sec['u_stem_back_bot'] - 0.02, min(sec['z_stem_top'] - 0.05, sec['h_foot_top'] + 0.48)),
                 to_world(s, sec['u_stem_front'] + 0.04, min(sec['z_stem_top'] - 0.05, sec['h_foot_top'] + 0.48))
             ])
+        # W1 철근: 벽체-저판 접합부(h_foot_top)에서 꺾이지 않고 벽체 배근 방향(u_stem_front)을
+        # 그대로 직선 연장하여 저판 하면(z_foot_bot + 0.016)에서만 1회 꺾이는 ㄱ자 형상
         w1_bars.append([
             to_world(s, max(sec['u_toe_rebar'] + 0.02, sec['u_stem_front'] - 0.200), sec['z_foot_bot'] + 0.016),
-            to_world(s, sec['u_stem_front'] + 0.06, sec['z_foot_bot'] + 0.016),
-            to_world(s, sec['u_stem_front'], sec['h_foot_top']),
+            to_world(s, sec['u_stem_front'], sec['z_foot_bot'] + 0.016),
             to_world(s, sec['u_stem_front'], sec['z_stem_top'])
         ])
         w5_bars.append([
@@ -398,7 +399,7 @@ def generate_wingwall_rebars(side='LEFT', custom_params=None, culvert_params=Non
         'desc': '벽체 전면 수직 주철근 (수로측 전면, 하단 저판 정착)',
         'spacing': '@250',
         'shape_type': 'STEM_VERTICAL_FRONT',
-        'shape_params': {'a': f"{total_h_0-0.20:.3f}~1.372", 'b': '200', 'c': '142'},
+        'shape_params': {'a': f"{total_h_0-0.20:.3f}~1.372", 'b': '200'},
         'length_m': w1_len,
         'count': n1,
         'total_length_m': round(w1_len * n1, 3),
