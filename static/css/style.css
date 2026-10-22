@@ -497,10 +497,10 @@ header {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -514,6 +514,45 @@ header {
   border-color: var(--accent-color);
   background: rgba(56, 189, 248, 0.08);
   box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.5);
+}
+
+/* 1.2: 3D 구조물 선택 영역 날개벽 등 텍스트 크기 1.5배 확대 */
+.struct-card-step3-title {
+  font-size: 17.5px !important;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
+}
+
+.struct-card-step3-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.struct-card-step3-info {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  margin-left: 20px;
+  line-height: 1.4;
+}
+
+/* 2.2: 철근 선택 시 표시되는 철근 번호 텍스트 크기 1.5배 확대 */
+#step3-detail-title {
+  font-size: 18px !important;
+  font-weight: 800 !important;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
+}
+
+#step3-detail-badge {
+  font-size: 13.5px !important;
+  font-weight: 700 !important;
+  padding: 3px 8px !important;
 }
 
 /* Step 2 Clean Components */

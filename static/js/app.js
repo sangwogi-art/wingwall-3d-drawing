@@ -42,7 +42,7 @@ class WingwallApp {
     );
     this.viewer3d.onSelectRebar = (mark, wwId) => this.selectRebarMark(mark, wwId);
     this.viewer3d.onDeselectRebar = () => this.hideRebarDetailCard();
-    this.viewer3d.onSelectWingwall = (objId) => this.selectStep3Structure(objId);
+    this.viewer3d.onSelectWingwall = (objId) => this.selectStep3Structure(objId, false);
 
     this.viewer2d = new CAD2DViewer('cad-canvas', (id) => {
       if (this.currentStep === 2) {
@@ -472,7 +472,8 @@ class WingwallApp {
       this.viewer3d.setStepMode(3);
       this.renderStep3Sidebar();
       this.hideRebarDetailCard();
-      this.selectStep3Structure(this.selectedStep3Structure || 'WW_END_LEFT');
+      // Requirement 3.2.1: 3단계 진입 시 기본 선택 구조물은 ‘암거본체’로 설정
+      this.selectStep3Structure('CULVERT', true);
     }
 
     this.renderViewportTopBar();
@@ -516,22 +517,9 @@ class WingwallApp {
     const rLen = this.modelData?.objects?.ww_right?.dimensions?.length ?? this.params.right.length;
 
     if (this.currentStep === 3) {
-      const rebCount = this.getRebarDrawings().length;
-      const totBars = this.modelData?.rebars?.summary?.total_bars ?? 0;
-      el.innerHTML = `
-        <div class="overlay-chip" style="border-color:rgba(16,185,129,0.5);">
-          <strong style="color:#34d399;">[3단계: 배근도 기반 3D 철근 배근]</strong> 적용 배근도: ${rebCount}개 도면 (총 ${totBars}본)
-        </div>
-        <div class="overlay-chip">
-          <span style="color:#f43f5e;">●</span> H19 우각부보강(C1·C2) &nbsp;
-          <span style="color:#38bdf8;">●</span> H16 주철근(W1·W5·W6·F1·F2·F6) &nbsp;
-          <span style="color:#10b981;">●</span> H13 배력·전단근 &nbsp;
-          <span style="color:#facc15;">●</span> 선택 철근
-        </div>
-        <div class="overlay-chip" style="font-size:10px; color:#94a3b8;">
-          좌클릭: 회전 | 우클릭: 이동 | 휠: 줌 | 3D 철근 클릭: 해당 기호 하이라이트 및 상세보기
-        </div>
-      `;
+      // Requirement 3.1.1 & 3.1.2: 3단계에서 불필요한 안내 문구 및 텍스트 완전 삭제
+      el.innerHTML = '';
+      return;
     } else {
       const genDwgs = this.getGeneralDrawings();
       const genName = genDwgs.length > 0 ? genDwgs.map(d => d.fileName).join(', ') : '선택된 일반도 없음';
@@ -571,8 +559,9 @@ class WingwallApp {
       stepBadgeHtml = `<span class="dwg-type-badge type-general">2단계: 일반도 전용</span> <span>외형 모델 (${gen.length}종)</span>`;
       targetDrawings = gen;
     } else {
-      stepBadgeHtml = `<span class="dwg-type-badge type-rebar">3단계: 배근도</span> <span>3D 철근 배근 모델링</span>`;
-      targetDrawings = []; // 도면 탭 미표시 (지침 4 준수: 배근도 확인 탭 삭제)
+      // Requirement 3.1.1: '[3단계: 배근도 기반 3D 철근배근]' 문구 삭제
+      stepBadgeHtml = '';
+      targetDrawings = [];
     }
 
     ind.innerHTML = stepBadgeHtml;
@@ -1113,35 +1102,8 @@ class WingwallApp {
 
   // ==================== STEP 3 RENDERERS (배근도 기반 3D 철근 배근) ====================
   renderStep3Sidebar() {
-    this.renderStep3SummaryCard();
+    // 1.1: 좌측 바에서 '적용배근도/구조도' 테이블 항목 삭제 (Requirement 1.1)
     this.renderStep3StructuresList();
-  }
-
-  renderStep3SummaryCard() {
-    const card = document.getElementById('step3-rebar-summary-card');
-    if (!card) return;
-    const summary = this.modelData?.rebars?.summary;
-
-    const totBars = summary?.total_bars ?? 508;
-    const totTon = summary?.total_weight_ton ?? '1.543';
-
-    card.innerHTML = `
-      <div class="panel-section" style="margin-bottom:0; padding:10px 12px; border-left:3px solid var(--accent-color);">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-          <span style="font-size:11px; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:5px;">
-            <span>🔩</span> 적용 배근도/구조도 (4종)
-          </span>
-          <span class="badge" style="background:rgba(16,185,129,0.18); color:#34d399; font-size:10px;">배근 완료</span>
-        </div>
-        <div style="font-size:10.5px; color:var(--text-secondary); line-height:1.4;">
-          종점 우측(01~02) 및 종점 좌측(03~04) 구조도 기반 날개벽 내부 3D 철근 배근
-        </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.06); font-size:10.5px;">
-          <div><span style="color:var(--text-muted);">총 배근 본수:</span> <strong style="color:var(--text-primary);">${totBars} 본</strong></div>
-          <div><span style="color:var(--text-muted);">총 철근 중량:</span> <strong style="color:#38bdf8;">${totTon} TON</strong></div>
-        </div>
-      </div>
-    `;
   }
 
   renderStep3StructuresList() {
@@ -1155,18 +1117,18 @@ class WingwallApp {
 
     const items = [];
 
-    // 1. 암거 본체
+    // 1. 암거 본체 (초기 기본 선택 구조물 - Requirement 3.2.1)
     if (culv) {
       items.push({
         id: 'CULVERT',
         name: `암거 본체 (${station})`,
         tag: `내공 ${culv.dimensions.clear_span.toFixed(1)}×${culv.dimensions.clear_height.toFixed(1)}m`,
         color: '#94a3b8',
-        info: `사각 ${culv.dimensions.skew_angle.toFixed(1)}° | 콘크리트 ${culv.volume} m³ | 전체 보기`
+        info: `전체 보기 (날개벽 선택 시 해당 부재 기본 구도 및 철근 집중)`
       });
     }
 
-    // 2. 종점부 날개벽 (도면에 실제 존재하는 날개벽만 표기)
+    // 2. 종점부 날개벽 2개소 (도면에 실제 존재하는 부재만 표기)
     const wwList = this.modelData.objects.wingwalls || [];
     const colorMap = {
       'WW_END_LEFT': '#38bdf8',
@@ -1180,13 +1142,14 @@ class WingwallApp {
       const wwReb = reb?.wingwalls?.[ww.id];
       const barCount = wwReb ? wwReb.groups.reduce((acc, g) => acc + g.count, 0) : 0;
       const weightTon = wwReb ? wwReb.groups.reduce((acc, g) => acc + g.weight_ton, 0).toFixed(3) : '0';
+      const cleanName = (ww.id === 'WW_END_LEFT') ? '종점부 좌측 날개벽' : ((ww.id === 'WW_END_RIGHT') ? '종점부 우측 날개벽' : ww.name);
 
       items.push({
         id: ww.id,
-        name: ww.name,
+        name: cleanName,
         tag: `L=${ww.dimensions.length.toFixed(2)}m (${ww.dimensions.flare_angle.toFixed(0)}°)`,
         color: c,
-        info: `철근 ${barCount}본 (${weightTon} TON) | 체적 ${ww.volume} m³`
+        info: `철근 배근 ${barCount}본 (${weightTon} TON) | 체적 ${ww.volume} m³`
       });
     }
 
@@ -1196,30 +1159,35 @@ class WingwallApp {
       card.className = `struct-card-step3 ${isSel ? 'selected' : ''}`;
       card.id = `step3-struct-${s.id}`;
 
+      // 1.2: 텍스트 크기 1.5배 확대 클래스 (struct-card-step3-title: 17.5px)
       card.innerHTML = `
-        <div class="struct-card-step2-row1">
-          <div class="struct-card-step2-title" style="font-size:11.5px;">
-            <span style="color:${s.color};">●</span>
+        <div class="struct-card-step2-row1" style="align-items:center;">
+          <div class="struct-card-step3-title">
+            <span style="color:${s.color}; font-size:16px;">●</span>
             <span>${s.name}</span>
           </div>
-          <span class="struct-card-step2-tag" style="border:1px solid ${s.color}40; color:${s.color}; font-size:9.5px; padding:1px 5px;">${s.tag}</span>
+          <span class="struct-card-step3-tag" style="border:1px solid ${s.color}40; color:${s.color};">${s.tag}</span>
         </div>
-        <div style="font-size:10px; color:var(--text-secondary); margin-left:14px;">
+        <div class="struct-card-step3-info">
           ${s.info}
         </div>
       `;
 
       card.addEventListener('click', () => {
-        this.selectStep3Structure(s.id);
+        // Requirement 3.5.2: 좌측 바에서 날개벽/암거 이름을 클릭했을 때만 모델의 기본 구도(시점) 변경
+        this.selectStep3Structure(s.id, true);
       });
 
       list.appendChild(card);
     }
   }
 
-  selectStep3Structure(structId) {
+  // Requirement 3.4.6 & 3.5.2: 구조물 선택 및 기본 구도 연동
+  selectStep3Structure(structId, updateCamera = true) {
     this.selectedStep3Structure = structId;
-    this.viewer3d.focusWingwall(structId);
+    this.hideRebarDetailCard();
+    this.viewer3d.clearRebarSelection();
+    this.viewer3d.focusWingwall(structId, updateCamera);
 
     // Update active style on cards
     document.querySelectorAll('.struct-card-step3').forEach(el => el.classList.remove('selected'));
@@ -1230,22 +1198,25 @@ class WingwallApp {
     }
   }
 
+  // Requirement 3.4: 날개벽에 종속된 철근 선택
   selectRebarMark(mark, wwId) {
-    if (!mark) {
+    const targetWw = wwId || this.selectedStep3Structure;
+    if (!mark || targetWw === 'CULVERT') {
       this.hideRebarDetailCard();
       this.viewer3d.clearRebarSelection();
       return;
     }
     this.selectedRebarMark = mark;
-    if (wwId) this.selectedRebarWingwall = wwId;
+    this.selectedRebarWingwall = targetWw;
 
-    this.viewer3d.selectRebarMark(mark);
+    this.viewer3d.selectRebarMark(mark, targetWw);
 
     if (this.currentStep === 3) {
-      this.showRebarDetailCard(mark, wwId);
+      this.showRebarDetailCard(mark, targetWw);
     }
   }
 
+  // Requirement 2.1 & 2.2 & 3.4: 선택된 날개벽에 속한 철근만 1.5배 확대 텍스트로 상세 표출
   showRebarDetailCard(mark, wingwallId) {
     const card = document.getElementById('step3-rebar-detail-card');
     const titleEl = document.getElementById('step3-detail-title');
@@ -1253,46 +1224,60 @@ class WingwallApp {
     const bodyEl = document.getElementById('step3-rebar-detail-body');
     if (!card || !bodyEl || !this.modelData || !this.modelData.rebars) return;
 
-    const leftWw = this.modelData.rebars.wingwalls.WW_END_LEFT;
-    const rightWw = this.modelData.rebars.wingwalls.WW_END_RIGHT;
+    const targetWwId = wingwallId || this.selectedStep3Structure || 'WW_END_LEFT';
+    if (targetWwId === 'CULVERT') {
+      this.hideRebarDetailCard();
+      return;
+    }
 
-    const rg = (rightWw?.groups || []).find(g => g.mark === mark) || rightWw?.groups[0];
-    const lg = (leftWw?.groups || []).find(g => g.mark === (rg?.mark || mark)) || leftWw?.groups[0];
+    const wwData = this.modelData.rebars.wingwalls[targetWwId];
+    if (!wwData) return;
 
-    if (!rg) return;
+    const wwName = (targetWwId === 'WW_END_LEFT') ? '종점부 좌측 날개벽' : '종점부 우측 날개벽';
+    const g = (wwData.groups || []).find(item => item.mark === mark);
+    if (!g) return;
 
-    const col = rg.dia === 'H19' ? '#f43f5e' : (rg.dia === 'H16' ? '#38bdf8' : '#10b981');
-    const totCount = (rg.count || 0) + (lg ? lg.count : 0);
-    const totLen = ((rg.total_length_m || 0) + (lg ? lg.total_length_m : 0)).toFixed(3);
-    const totWeight = ((rg.weight_ton || 0) + (lg ? lg.weight_ton : 0)).toFixed(4);
+    const col = g.dia === 'H19' ? '#f43f5e' : (g.dia === 'H16' ? '#38bdf8' : '#10b981');
+    const totWeight = g.weight_ton.toFixed(4);
 
-    if (titleEl) titleEl.textContent = `철근 [${rg.mark}] 상세 제원`;
+    // 2.2: 철근 번호 텍스트 크기 1.5배 확대 표출 (18px)
+    if (titleEl) {
+      titleEl.innerHTML = `
+        <span style="font-size:18px; font-weight:800; color:#facc15;">철근 [${g.mark}]</span>
+        <span style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-left:6px;">${wwName} (L=${Number(wwData.length).toFixed(2)}m)</span>
+      `;
+    }
     if (badgeEl) {
-      badgeEl.textContent = `${rg.dia} (SD400)`;
-      badgeEl.style.background = `${col}22`;
+      badgeEl.textContent = `${g.dia} (SD400)`;
+      badgeEl.style.fontSize = '12px';
+      badgeEl.style.background = `${col}25`;
       badgeEl.style.color = col;
       badgeEl.style.border = `1px solid ${col}66`;
     }
 
     bodyEl.innerHTML = `
-      <div style="font-size:11px; color:var(--text-secondary); margin-bottom:4px;">
-        ${rg.desc}
+      <div style="font-size:11.5px; color:var(--text-secondary); margin-bottom:6px; line-height:1.4;">
+        ${g.desc}
       </div>
 
-      <div class="rebar-shape-box" style="margin:4px 0; padding:6px; background:rgba(0,0,0,0.25); border-radius:4px;">
-        <div style="font-size:9.5px; color:var(--text-muted); margin-bottom:2px;">
+      <div class="rebar-shape-box" style="margin:6px 0; padding:8px; background:rgba(0,0,0,0.3); border-radius:6px;">
+        <div style="font-size:10px; color:var(--text-muted); margin-bottom:4px;">
           📐 철근 절곡 형상도 (Bar Bending Detail)
         </div>
-        ${this.buildRebarShapeSvg(rg)}
+        ${this.buildRebarShapeSvg(g)}
       </div>
 
-      <div class="meta-grid" style="font-size:10.5px; display:grid; grid-template-columns:1fr 1fr; gap:4px;">
-        <div class="meta-item"><span class="label">배치 부위</span><span class="value">${rg.zone}</span></div>
-        <div class="meta-item"><span class="label">간격 / 피복</span><span class="value">${rg.spacing} (피복 80mm)</span></div>
-        <div class="meta-item"><span class="label">종점 좌측 (${Number(leftWw?.length || 4.35).toFixed(2)}m)</span><span class="value">${lg ? lg.count : 0}본 (${lg ? lg.length_m : 0}m)</span></div>
-        <div class="meta-item"><span class="label">종점 우측 (${Number(rightWw?.length || 5.4).toFixed(2)}m)</span><span class="value">${rg.count}본 (${rg.length_m}m)</span></div>
-        <div class="meta-item"><span class="label">총 본수 / 총연장</span><span class="value">${totCount}본 (${totLen}m)</span></div>
-        <div class="meta-item" style="border-color:${col}66;"><span class="label">총 중량</span><span class="value" style="color:${col}; font-weight:700;">${totWeight} TON</span></div>
+      <div class="meta-grid" style="font-size:11px; display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-top:6px;">
+        <div class="meta-item"><span class="label">소속 날개벽</span><span class="value" style="color:#38bdf8; font-weight:700;">${wwName}</span></div>
+        <div class="meta-item"><span class="label">배치 부위</span><span class="value">${g.zone}</span></div>
+        <div class="meta-item"><span class="label">배근 간격</span><span class="value">${g.spacing} (피복 80mm)</span></div>
+        <div class="meta-item"><span class="label">1본 길이</span><span class="value">${g.length_m.toFixed(3)} m</span></div>
+        <div class="meta-item"><span class="label">해당부재 본수</span><span class="value" style="font-weight:700;">${g.count} 본</span></div>
+        <div class="meta-item"><span class="label">해당부재 총연장</span><span class="value">${g.total_length_m.toFixed(3)} m</span></div>
+        <div class="meta-item" style="border-color:${col}66; grid-column:span 2;">
+          <span class="label">철근 중량 (${g.unit_weight}kg/m)</span>
+          <span class="value" style="color:${col}; font-weight:800; font-size:13px;">${totWeight} TON</span>
+        </div>
       </div>
     `;
 

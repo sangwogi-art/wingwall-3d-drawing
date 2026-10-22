@@ -9,6 +9,7 @@ class Viewer3D {
     this.sectionMarkers = [];
     this.labelSprites = [];
     this.rebarLabelSprites = [];
+    this.wingwallNameSprites = [];
     this.displayMode = 'solid'; // 'solid', 'wireframe', 'transparent'
     this.stepMode = 2; // 2: Exterior only, 3: Exterior (ghosted) + 3D Rebars
     this.selectedObjectId = null;
@@ -113,6 +114,7 @@ class Viewer3D {
     }
     this.meshes = {};
     this.clearSectionMarkers();
+    this.clearWingwallNameSprites();
 
     const objects = modelData.objects || {};
     const botEl = objects.culvert?.dimensions?.bot_el ?? 33.404;
@@ -168,6 +170,9 @@ class Viewer3D {
     if (modelData.rebars) {
       this.buildRebarMeshes(modelData.rebars);
     }
+
+    // Build wingwall 3D structure name sprites (Requirement 3.2.2 & 3.3)
+    this.buildWingwallNameSprites();
 
     this.applyStepVisualState();
     this.fitView();
@@ -341,6 +346,7 @@ class Viewer3D {
     for (const sp of this.rebarLabelSprites) {
       sp.visible = isStep3;
     }
+    this.updateWingwallNameSpritesVisibility();
 
     // Concrete appearance
     for (const id in this.meshes) {
@@ -387,27 +393,35 @@ class Viewer3D {
     }
   }
 
-  selectRebarMark(mark) {
+  selectRebarMark(mark, targetWingwallId) {
+    const wwId = targetWingwallId || this.selectedWingwallFocus;
     this.selectedRebarMark = mark;
+    this.selectedRebarWingwall = wwId;
     this.clearRebarLabels();
+    for (const sp of this.wingwallNameSprites) sp.visible = false;
 
     for (const grpObj of this.rebarMeshes) {
       const u = grpObj.userData;
       const mat = u.mat;
-      if (u.mark === mark) {
+      const isTargetWingwall = (u.wingwallId === wwId);
+      const isTargetBar = isTargetWingwall && (u.mark === mark);
+
+      if (isTargetBar) {
+        // 오직 선택된 날개벽에 속한 철근만 정상 색상 및 하이라이트 활성화
         mat.transparent = false;
         mat.opacity = 1.0;
-        mat.color.setHex(0xfacc15); // Bright highlight gold
+        mat.color.setHex(0xfacc15); // 밝은 골드 하이라이트
         mat.emissive.setHex(0xf59e0b);
         mat.emissiveIntensity = 0.65;
 
-        // Add floating 3D callout sprite at midpoint of first bar in group
+        // 선택된 날개벽의 해당 철근 위치에 3D 텍스트 레이블 생성
         const polys = u.groupData.polylines;
         if (polys && polys.length > 0) {
           const midPoly = polys[Math.floor(polys.length / 2)];
           const pt = midPoly[Math.floor(midPoly.length / 2)];
           if (pt) {
-            const labelText = `[${u.mark}] ${u.dia} (${u.groupData.role})`;
+            const wwName = (wwId === 'WW_END_LEFT') ? '종점좌' : '종점우';
+            const labelText = `[${u.mark}] ${u.dia} (${wwName})`;
             const sp = this.createTextSprite(labelText, 0xfacc15);
             sp.position.set(pt[0], pt[1], pt[2] + 0.55);
             this.scene.add(sp);
@@ -417,34 +431,61 @@ class Viewer3D {
       } else {
         mat.emissive.setHex(0x000000);
         mat.emissiveIntensity = 0;
-        if (this.selectedWingwallFocus && this.selectedWingwallFocus !== 'CULVERT') {
-          if (u.wingwallId === this.selectedWingwallFocus) {
-            mat.transparent = false;
-            mat.opacity = 1.0;
-            mat.color.setHex(u.baseColor);
-          } else {
-            mat.transparent = true;
-            mat.opacity = 0.12;
-            mat.color.setHex(0x64748b);
-          }
-        } else {
+        if (isTargetWingwall) {
+          // 선택된 날개벽 내 다른 철근은 정상 선명도 유지
           mat.transparent = false;
           mat.opacity = 1.0;
           mat.color.setHex(u.baseColor);
+        } else {
+          // 다른 날개벽의 철근(동일 철근기호 포함)은 비활성화(흐릿한 0.10 불투명도)
+          mat.transparent = true;
+          mat.opacity = 0.10;
+          mat.color.setHex(0x64748b);
         }
       }
     }
   }
 
-  focusWingwall(wingwallId) {
+  // 좌측 바에서 날개벽/암거 이름을 클릭한 경우에만 기본 구도 변경 (Requirement 3.5.2)
+  focusWingwall(wingwallId, updateCamera = false) {
     this.selectedWingwallFocus = wingwallId;
 
-    if (wingwallId === 'CULVERT' || !wingwallId) {
-      this.fitView();
-      for (const id in this.meshes) {
-        const m = this.meshes[id];
-        const mat = m.group.userData.mat;
-        const edgesMat = m.group.userData.edgesMat;
+    if (updateCamera) {
+      if (wingwallId === 'CULVERT' || !wingwallId) {
+        this.fitView();
+      } else {
+        const targetMesh = this.meshes[wingwallId];
+        if (targetMesh && targetMesh.group) {
+          const box = new THREE.Box3().setFromObject(targetMesh.group);
+          if (!box.isEmpty()) {
+            const center = new THREE.Vector3();
+            const size = new THREE.Vector3();
+            box.getCenter(center);
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+            this.controls.target.copy(center);
+            this.camera.position.set(center.x + maxDim * 1.5, center.y - maxDim * 1.4, center.z + maxDim * 1.1);
+            this.camera.lookAt(center);
+            this.controls.update();
+          }
+        }
+      }
+    }
+
+    this.applyWingwallVisuals(wingwallId);
+  }
+
+  // 카메라 구도를 변경하지 않고 콘크리트 및 철근의 시각적 활성/비활성 상태만 갱신
+  applyWingwallVisuals(wingwallId) {
+    const isCulvert = (wingwallId === 'CULVERT' || !wingwallId);
+
+    // 1. 콘크리트 솔리드 외형
+    for (const id in this.meshes) {
+      const m = this.meshes[id];
+      const mat = m.group.userData.mat;
+      const edgesMat = m.group.userData.edgesMat;
+
+      if (isCulvert) {
         mat.transparent = true;
         mat.opacity = (id === 'CULVERT') ? Math.min(0.20, this.concreteOpacity * 0.7) : this.concreteOpacity;
         mat.color.setHex((id === 'CULVERT') ? 0x94a3b8 : (id === 'WW_END_LEFT' ? 0x38bdf8 : 0xfbbf24));
@@ -452,84 +493,63 @@ class Viewer3D {
           edgesMat.transparent = true;
           edgesMat.opacity = 0.35;
         }
-      }
-      for (const grpObj of this.rebarMeshes) {
-        const u = grpObj.userData;
-        u.mat.transparent = false;
-        u.mat.opacity = 1.0;
-        if (u.mark !== this.selectedRebarMark) {
-          u.mat.color.setHex(u.baseColor);
-        }
-      }
-      return;
-    }
-
-    // Wingwall focused (WW_END_LEFT or WW_END_RIGHT)
-    const targetMesh = this.meshes[wingwallId];
-    if (targetMesh && targetMesh.group) {
-      const box = new THREE.Box3().setFromObject(targetMesh.group);
-      if (!box.isEmpty()) {
-        const center = new THREE.Vector3();
-        const size = new THREE.Vector3();
-        box.getCenter(center);
-        box.getSize(size);
-        const maxDim = Math.max(size.x, size.y, size.z);
-        this.controls.target.copy(center);
-        this.camera.position.set(center.x + maxDim * 1.5, center.y - maxDim * 1.4, center.z + maxDim * 1.1);
-        this.camera.lookAt(center);
-        this.controls.update();
-      }
-    }
-
-    // Concrete styling: selected wingwall is normal/active; others are faint/dim (참고용 유지)
-    for (const id in this.meshes) {
-      const m = this.meshes[id];
-      const mat = m.group.userData.mat;
-      const edgesMat = m.group.userData.edgesMat;
-      if (id === wingwallId) {
-        mat.transparent = true;
-        mat.opacity = this.concreteOpacity;
-        mat.color.setHex(id === 'WW_END_LEFT' ? 0x38bdf8 : 0xfbbf24);
-        if (edgesMat) {
-          edgesMat.transparent = true;
-          edgesMat.opacity = 0.50;
-        }
       } else {
-        mat.transparent = true;
-        mat.opacity = 0.08;
-        mat.color.setHex(0x475569);
-        if (edgesMat) {
-          edgesMat.transparent = true;
-          edgesMat.opacity = 0.12;
+        if (id === wingwallId) {
+          mat.transparent = true;
+          mat.opacity = this.concreteOpacity;
+          mat.color.setHex(id === 'WW_END_LEFT' ? 0x38bdf8 : 0xfbbf24);
+          if (edgesMat) {
+            edgesMat.transparent = true;
+            edgesMat.opacity = 0.50;
+          }
+        } else {
+          // 비선택 구조물: 옅고 흐릿하게 비활성화 (위치 파악용 유지)
+          mat.transparent = true;
+          mat.opacity = 0.08;
+          mat.color.setHex(0x475569);
+          if (edgesMat) {
+            edgesMat.transparent = true;
+            edgesMat.opacity = 0.12;
+          }
         }
       }
     }
 
-    // Rebars: selected wingwall's rebars are active & vivid; other wingwall's rebars are deactivated/dim
+    // 2. 철근군
     for (const grpObj of this.rebarMeshes) {
       const u = grpObj.userData;
-      if (u.wingwallId === wingwallId) {
+      if (isCulvert) {
         u.mat.transparent = false;
         u.mat.opacity = 1.0;
         if (u.mark !== this.selectedRebarMark) {
           u.mat.color.setHex(u.baseColor);
         }
       } else {
-        u.mat.transparent = true;
-        u.mat.opacity = 0.12;
-        u.mat.color.setHex(0x64748b);
+        if (u.wingwallId === wingwallId) {
+          u.mat.transparent = false;
+          u.mat.opacity = 1.0;
+          if (u.mark !== this.selectedRebarMark) {
+            u.mat.color.setHex(u.baseColor);
+          }
+        } else {
+          // 다른 날개벽 철근 비활성화
+          u.mat.transparent = true;
+          u.mat.opacity = 0.10;
+          u.mat.color.setHex(0x64748b);
+        }
       }
     }
+
+    // 3. 날개벽 이름 텍스트 라벨 (Requirement 3.2.2 & 3.3)
+    this.updateWingwallNameSpritesVisibility();
   }
 
+  // 화면 클릭이나 선택 해제 시 카메라 시점을 유지한 채 철근 하이라이트만 초기화 (Requirement 3.5.1)
   clearRebarSelection() {
     this.selectedRebarMark = null;
+    this.selectedRebarWingwall = null;
     this.clearRebarLabels();
-    if (this.selectedWingwallFocus) {
-      this.focusWingwall(this.selectedWingwallFocus);
-    } else {
-      this.focusWingwall('CULVERT');
-    }
+    this.applyWingwallVisuals(this.selectedWingwallFocus || 'CULVERT');
   }
 
   clearRebarLabels() {
@@ -618,7 +638,8 @@ class Viewer3D {
     texture.minFilter = THREE.LinearFilter;
     const spriteMat = new THREE.SpriteMaterial({ map: texture, depthTest: false });
     const sprite = new THREE.Sprite(spriteMat);
-    sprite.scale.set(3.6, 0.75, 1);
+    sprite.scale.set(3.6, 0.72, 1);
+    sprite.userData.aspect = 320 / 64; // 5.0
     return sprite;
   }
 
@@ -632,6 +653,54 @@ class Viewer3D {
       this.scene.remove(sprite);
     }
     this.labelSprites = [];
+  }
+
+  // Requirement 3.2.2 & 3.3: 암거본체 선택 시 날개벽 구조물 이름만 3D 모델 위에 표시
+  buildWingwallNameSprites() {
+    this.clearWingwallNameSprites();
+    const wwItems = [
+      { id: 'WW_END_LEFT', name: '종점부 좌측 날개벽', color: 0x38bdf8 },
+      { id: 'WW_END_RIGHT', name: '종점부 우측 날개벽', color: 0xfbbf24 }
+    ];
+
+    for (const item of wwItems) {
+      const meshObj = this.meshes[item.id] || this.meshes[item.id.toLowerCase()];
+      if (!meshObj || !meshObj.group) continue;
+      const box = new THREE.Box3().setFromObject(meshObj.group);
+      if (box.isEmpty()) continue;
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      const sprite = this.createTextSprite(item.name, item.color);
+      sprite.position.set(center.x, center.y, box.max.z + 0.65);
+      sprite.userData.wingwallId = item.id;
+      sprite.visible = false;
+      this.scene.add(sprite);
+      this.wingwallNameSprites.push(sprite);
+    }
+  }
+
+  clearWingwallNameSprites() {
+    for (const sp of this.wingwallNameSprites) {
+      this.scene.remove(sp);
+    }
+    this.wingwallNameSprites = [];
+  }
+
+  updateWingwallNameSpritesVisibility() {
+    if (this.stepMode !== 3) {
+      for (const sp of this.wingwallNameSprites) sp.visible = false;
+      return;
+    }
+    const isCulvert = (!this.selectedWingwallFocus || this.selectedWingwallFocus === 'CULVERT');
+    for (const sp of this.wingwallNameSprites) {
+      if (isCulvert) {
+        // 암거본체 선택 시 날개벽 구조물의 이름만 표시 (Requirement 3.2.2)
+        sp.visible = true;
+      } else {
+        // 특정 날개벽 선택 시 해당 날개벽 이름만 표시
+        sp.visible = (sp.userData.wingwallId === this.selectedWingwallFocus);
+      }
+    }
   }
 
   selectObject(objectId) {
@@ -711,28 +780,43 @@ class Viewer3D {
       }
       const hits = this.raycaster.intersectObjects(visibleRebarChildren, false);
       if (hits.length > 0) {
-        const hitObj = hits[0].object;
-        const mark = hitObj.userData.mark || hitObj.parent?.userData?.mark;
-        if (mark) {
-          this.selectRebarMark(mark);
-          if (this.onSelectRebar) this.onSelectRebar(mark, hitObj.userData.wingwallId);
-          return;
+        let chosenHit = null;
+        for (const h of hits) {
+          const hitWwId = h.object.userData.wingwallId;
+          if (this.selectedWingwallFocus && this.selectedWingwallFocus !== 'CULVERT') {
+            if (hitWwId === this.selectedWingwallFocus) {
+              chosenHit = h;
+              break;
+            }
+          } else {
+            chosenHit = h;
+            break;
+          }
+        }
+
+        if (chosenHit) {
+          const hitObj = chosenHit.object;
+          const mark = hitObj.userData.mark || hitObj.parent?.userData?.mark;
+          const hitWwId = hitObj.userData.wingwallId || hitObj.parent?.userData?.wingwallId;
+
+          // Requirement 3.4.1: 선택된 날개벽에 속한 철근만 선택 허용
+          if (this.selectedWingwallFocus && this.selectedWingwallFocus !== 'CULVERT') {
+            if (hitWwId !== this.selectedWingwallFocus) {
+              return;
+            }
+          }
+
+          if (mark && hitWwId) {
+            this.selectRebarMark(mark, hitWwId);
+            if (this.onSelectRebar) this.onSelectRebar(mark, hitWwId);
+            return;
+          }
         }
       }
 
-      // Check structure hit in Step 3
-      const meshes = Object.values(this.meshes).map(m => m.group.userData.mesh);
-      const intersects = this.raycaster.intersectObjects(meshes);
-      if (intersects.length > 0) {
-        const hitMesh = intersects[0].object;
-        const objId = hitMesh.userData.id;
-        this.focusWingwall(objId);
-        if (this.onSelectWingwall) this.onSelectWingwall(objId);
-      } else {
-        // Clicked background: clear rebar selection and close rebar detail
-        this.clearRebarSelection();
-        if (this.onDeselectRebar) this.onDeselectRebar();
-      }
+      // Requirement 3.5.1: 빈 바닥 클릭 시 카메라 구도를 절대 초기화하지 않고 철근 선택만 해제
+      this.clearRebarSelection();
+      if (this.onDeselectRebar) this.onDeselectRebar();
       return;
     }
 
@@ -761,6 +845,18 @@ class Viewer3D {
   animate() {
     requestAnimationFrame(() => this.animate());
     this.controls.update();
+
+    // Requirement 3.3: 줌 확대/축소 시에도 3D 텍스트 크기 일정 유지 (Screen-space constant size)
+    const sprites = [...this.rebarLabelSprites, ...this.labelSprites, ...this.wingwallNameSprites];
+    for (const sp of sprites) {
+      if (sp && sp.visible) {
+        const dist = this.camera.position.distanceTo(sp.position);
+        const baseScale = dist * 0.040;
+        const aspect = sp.userData.aspect || 5.0;
+        sp.scale.set(baseScale * aspect, baseScale, 1);
+      }
+    }
+
     this.renderer.render(this.scene, this.camera);
   }
 }
