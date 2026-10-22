@@ -1,6 +1,5 @@
 import math
 import numpy as np
-import json
 import rebar_model
 
 
@@ -122,7 +121,6 @@ def get_wingwall_mesh(side='LEFT', custom_params=None, culvert_params=None, num_
         pos_str = 'START_RIGHT'
 
     is_left_side = ('LEFT' in pos_str)
-    is_start = ('START' in pos_str)
 
     cp = custom_params or {}
     culv = culvert_params or {}
@@ -554,6 +552,7 @@ def generate_full_model(params=None, drawings_list=None):
 
 
 if __name__ == '__main__':
+    import json
     res = generate_full_model()
     print("Full model generated:")
     print("  Total volume:", res['summary']['total_volume'], "m3")

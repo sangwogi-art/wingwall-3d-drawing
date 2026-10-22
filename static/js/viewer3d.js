@@ -887,27 +887,10 @@ class Viewer3D {
       new THREE.Vector3(d2.x, d2.y, zDim + tickLen)
     );
 
-    const geom = new THREE.BufferGeometry().setFromPoints(linePoints);
-    const mat = new THREE.LineBasicMaterial({
-      color: 0xffffff, // Requirement 4: 모든 치수선 흰색
-      linewidth: 2,
-      depthTest: false,
-      transparent: true,
-      opacity: 0.95
-    });
-    const lineSegs = new THREE.LineSegments(geom, mat);
-    lineSegs.renderOrder = 999;
-    this.dimensionGroup.add(lineSegs);
-
-    // 치수값 텍스트 라벨 (수평 치수선 상단 중앙 배치)
+    // 치수선 및 텍스트 렌더링
     const mid = new THREE.Vector3().addVectors(d1, d2).multiplyScalar(0.5);
     const spritePos = new THREE.Vector3(mid.x, mid.y, zDim + 0.28);
-
-    const sprite = this.createDimensionTextSprite(text);
-    sprite.position.copy(spritePos);
-    sprite.renderOrder = 1000;
-    this.scene.add(sprite);
-    this.dimensionSprites.push(sprite);
+    this._renderDimensionEntry(linePoints, spritePos, text);
   }
 
   // 높이 측정용 3D 치수선 생성 (Requirement 3 & 4: 흰색 치수선 및 간소화 표기)
@@ -936,6 +919,14 @@ class Viewer3D {
     linePoints.push(d1.clone().addScaledVector(tickDir, tickLen), d1.clone().addScaledVector(tickDir, -tickLen));
     linePoints.push(d2.clone().addScaledVector(tickDir, tickLen), d2.clone().addScaledVector(tickDir, -tickLen));
 
+    // 치수값 텍스트 라벨 (치수선 외측 중앙에 명확히 대응되도록 배치)
+    const mid = new THREE.Vector3().addVectors(d1, d2).multiplyScalar(0.5);
+    const spritePos = mid.clone().addScaledVector(offsetDir.clone().normalize(), 0.32);
+    this._renderDimensionEntry(linePoints, spritePos, text);
+  }
+
+  // 치수선 LineSegments 및 텍스트 Sprite 씬 등록 공통 헬퍼
+  _renderDimensionEntry(linePoints, spritePos, text) {
     const geom = new THREE.BufferGeometry().setFromPoints(linePoints);
     const mat = new THREE.LineBasicMaterial({
       color: 0xffffff, // Requirement 4: 모든 치수선 흰색
@@ -947,10 +938,6 @@ class Viewer3D {
     const lineSegs = new THREE.LineSegments(geom, mat);
     lineSegs.renderOrder = 999;
     this.dimensionGroup.add(lineSegs);
-
-    // 치수값 텍스트 라벨 (치수선 외측 중앙에 명확히 대응되도록 배치)
-    const mid = new THREE.Vector3().addVectors(d1, d2).multiplyScalar(0.5);
-    const spritePos = mid.clone().addScaledVector(offsetDir.clone().normalize(), 0.32);
 
     const sprite = this.createDimensionTextSprite(text);
     sprite.position.copy(spritePos);

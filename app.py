@@ -1,5 +1,4 @@
 import os
-import json
 import tempfile
 from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
@@ -15,6 +14,27 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 current_drawings_list = []
 current_drawing_data = None
 current_model_data = None
+
+
+def _resolve_classification(drawing_name, manual_type=None):
+    """도면명 기반 분류 및 사용자 수동 오버라이드 객체 생성 헬퍼"""
+    res = cad_parser.classify_drawing_by_name(drawing_name)
+    selected_type = manual_type if manual_type in ('GENERAL', 'REBAR') else res['auto_type']
+    label_map = {
+        'GENERAL': '일반도',
+        'REBAR': '배근도/구조도',
+        'UNCLASSIFIED': '미분류 (수동 선택 필요)'
+    }
+    return {
+        'autoType': res['auto_type'],
+        'autoLabel': res['auto_label'],
+        'matchedKeyword': res['matched_keyword'],
+        'reason': res['reason'],
+        'needsManualSelection': res['needs_manual_selection'],
+        'selectedType': selected_type,
+        'selectedLabel': label_map.get(selected_type, res['auto_label']),
+        'isManualOverride': bool(manual_type and manual_type != res['auto_type'])
+    }
 
 
 @app.route('/')
@@ -62,24 +82,7 @@ def api_classify():
     drawing_name = body.get('drawingName', '')
     manual_type = body.get('manualType')  # Optional: 'GENERAL' or 'REBAR'
 
-    res = cad_parser.classify_drawing_by_name(drawing_name)
-    selected_type = manual_type if manual_type in ('GENERAL', 'REBAR') else res['auto_type']
-    label_map = {
-        'GENERAL': '일반도',
-        'REBAR': '배근도/구조도',
-        'UNCLASSIFIED': '미분류 (수동 선택 필요)'
-    }
-
-    classification_obj = {
-        'autoType': res['auto_type'],
-        'autoLabel': res['auto_label'],
-        'matchedKeyword': res['matched_keyword'],
-        'reason': res['reason'],
-        'needsManualSelection': res['needs_manual_selection'],
-        'selectedType': selected_type,
-        'selectedLabel': label_map.get(selected_type, res['auto_label']),
-        'isManualOverride': bool(manual_type and manual_type != res['auto_type'])
-    }
+    classification_obj = _resolve_classification(drawing_name, manual_type)
 
     # Update active drawing classification in memory and regenerate 3D model
     for d in current_drawings_list:
@@ -135,12 +138,19 @@ def api_upload():
 
     # 2. Parse each uploaded DWG file
     parsed_drawings = []
-    for filename, temp_path in saved_files:
-        try:
+    try:
+        for filename, temp_path in saved_files:
             drawing_data = cad_parser.parse_dwg(temp_path, custom_filename=filename)
             parsed_drawings.append(drawing_data)
-        except Exception as e:
-            return jsonify({'status': 'error', 'message': f'도면 분석 중 오류 발생 ({filename}): {str(e)}'}), 500
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'도면 분석 중 오류 발생: {str(e)}'}), 500
+    finally:
+        for _, temp_path in saved_files:
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except OSError:
+                pass
 
     global current_drawing_data, current_model_data, current_drawings_list
     if reset_flag or current_drawings_list is None:

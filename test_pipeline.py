@@ -5,7 +5,6 @@ Verifies 2D drawing classification, DWG parsing, 3D solid & rebar modeling,
 mesh watertightness, exporter functionality, and Flask API endpoints.
 """
 import os
-import sys
 import json
 import unittest
 
@@ -156,6 +155,7 @@ class Test3DDrawingPipeline(unittest.TestCase):
         # 1. 메인 웹페이지
         r_index = self.flask_app.get('/')
         self.assertEqual(r_index.status_code, 200)
+        r_index.close()
 
         # 2. 기본 도면 데이터 조회 API
         r_def = self.flask_app.get('/api/default-drawing')
