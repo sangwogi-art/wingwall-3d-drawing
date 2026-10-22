@@ -329,6 +329,193 @@ header {
   display: none !important;
 }
 
+/* Step 3 2-Split Mode (세로 2분할: 좌측 구조물 선택 패널 + 우측 3D 모델 및 철근 기능) */
+.app-container.step-3-mode .sidebar-left {
+  width: 420px !important;
+  max-width: 420px !important;
+  flex: 0 0 420px !important;
+  border-right: 1px solid var(--border-color);
+}
+
+.app-container.step-3-mode .viewport-container {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  max-width: none !important;
+}
+
+.app-container.step-3-mode .sidebar-right {
+  display: none !important;
+}
+
+.app-container.step-3-mode #viewport-drawing-tabs,
+.app-container.step-3-mode #header-mode-controls {
+  display: none !important;
+}
+
+/* Step 3 Right HUD & Floating Cards */
+.step3-right-hud {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  bottom: 52px;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 60;
+  pointer-events: none;
+}
+
+.step3-ctrl-card, .step3-rebar-detail-card {
+  pointer-events: auto;
+  background: rgba(18, 24, 38, 0.94);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  transition: all 0.25s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.step3-ctrl-card .card-header, .step3-rebar-detail-card .card-header {
+  padding: 8px 12px;
+  background: rgba(56, 189, 248, 0.08);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  user-select: none;
+}
+
+.step3-ctrl-card .card-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.step3-rebar-detail-card .card-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 440px;
+  overflow-y: auto;
+}
+
+.ctrl-subgroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ctrl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.ctrl-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.ctrl-val {
+  font-size: 10.5px;
+  font-family: var(--font-mono, monospace);
+  color: var(--accent-color);
+  min-width: 32px;
+  text-align: right;
+}
+
+.mini-slider {
+  flex: 1;
+  height: 4px;
+  accent-color: var(--accent-color);
+  cursor: pointer;
+}
+
+.dia-pill-group, .zone-pill-group {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.dia-pill, .zone-pill {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.dia-pill.active, .zone-pill.active {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: var(--accent-color);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.dia-pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c, #38bdf8);
+}
+
+.btn-close-sm {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.btn-close-sm:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.struct-card-step3 {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.struct-card-step3:hover {
+  border-color: #475569;
+  background: rgba(30, 41, 59, 0.6);
+}
+
+.struct-card-step3.selected {
+  border-color: var(--accent-color);
+  background: rgba(56, 189, 248, 0.08);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.5);
+}
+
 /* Step 2 Clean Components */
 .step2-header-simple {
   padding: 12px 16px;

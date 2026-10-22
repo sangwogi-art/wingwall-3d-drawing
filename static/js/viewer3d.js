@@ -395,6 +395,8 @@ class Viewer3D {
       const u = grpObj.userData;
       const mat = u.mat;
       if (u.mark === mark) {
+        mat.transparent = false;
+        mat.opacity = 1.0;
         mat.color.setHex(0xfacc15); // Bright highlight gold
         mat.emissive.setHex(0xf59e0b);
         mat.emissiveIntensity = 0.65;
@@ -413,10 +415,120 @@ class Viewer3D {
           }
         }
       } else {
-        mat.color.setHex(u.baseColor);
         mat.emissive.setHex(0x000000);
         mat.emissiveIntensity = 0;
+        if (this.selectedWingwallFocus && this.selectedWingwallFocus !== 'CULVERT') {
+          if (u.wingwallId === this.selectedWingwallFocus) {
+            mat.transparent = false;
+            mat.opacity = 1.0;
+            mat.color.setHex(u.baseColor);
+          } else {
+            mat.transparent = true;
+            mat.opacity = 0.12;
+            mat.color.setHex(0x64748b);
+          }
+        } else {
+          mat.transparent = false;
+          mat.opacity = 1.0;
+          mat.color.setHex(u.baseColor);
+        }
       }
+    }
+  }
+
+  focusWingwall(wingwallId) {
+    this.selectedWingwallFocus = wingwallId;
+
+    if (wingwallId === 'CULVERT' || !wingwallId) {
+      this.fitView();
+      for (const id in this.meshes) {
+        const m = this.meshes[id];
+        const mat = m.group.userData.mat;
+        const edgesMat = m.group.userData.edgesMat;
+        mat.transparent = true;
+        mat.opacity = (id === 'CULVERT') ? Math.min(0.20, this.concreteOpacity * 0.7) : this.concreteOpacity;
+        mat.color.setHex((id === 'CULVERT') ? 0x94a3b8 : (id === 'WW_END_LEFT' ? 0x38bdf8 : 0xfbbf24));
+        if (edgesMat) {
+          edgesMat.transparent = true;
+          edgesMat.opacity = 0.35;
+        }
+      }
+      for (const grpObj of this.rebarMeshes) {
+        const u = grpObj.userData;
+        u.mat.transparent = false;
+        u.mat.opacity = 1.0;
+        if (u.mark !== this.selectedRebarMark) {
+          u.mat.color.setHex(u.baseColor);
+        }
+      }
+      return;
+    }
+
+    // Wingwall focused (WW_END_LEFT or WW_END_RIGHT)
+    const targetMesh = this.meshes[wingwallId];
+    if (targetMesh && targetMesh.group) {
+      const box = new THREE.Box3().setFromObject(targetMesh.group);
+      if (!box.isEmpty()) {
+        const center = new THREE.Vector3();
+        const size = new THREE.Vector3();
+        box.getCenter(center);
+        box.getSize(size);
+        const maxDim = Math.max(size.x, size.y, size.z);
+        this.controls.target.copy(center);
+        this.camera.position.set(center.x + maxDim * 1.5, center.y - maxDim * 1.4, center.z + maxDim * 1.1);
+        this.camera.lookAt(center);
+        this.controls.update();
+      }
+    }
+
+    // Concrete styling: selected wingwall is normal/active; others are faint/dim (참고용 유지)
+    for (const id in this.meshes) {
+      const m = this.meshes[id];
+      const mat = m.group.userData.mat;
+      const edgesMat = m.group.userData.edgesMat;
+      if (id === wingwallId) {
+        mat.transparent = true;
+        mat.opacity = this.concreteOpacity;
+        mat.color.setHex(id === 'WW_END_LEFT' ? 0x38bdf8 : 0xfbbf24);
+        if (edgesMat) {
+          edgesMat.transparent = true;
+          edgesMat.opacity = 0.50;
+        }
+      } else {
+        mat.transparent = true;
+        mat.opacity = 0.08;
+        mat.color.setHex(0x475569);
+        if (edgesMat) {
+          edgesMat.transparent = true;
+          edgesMat.opacity = 0.12;
+        }
+      }
+    }
+
+    // Rebars: selected wingwall's rebars are active & vivid; other wingwall's rebars are deactivated/dim
+    for (const grpObj of this.rebarMeshes) {
+      const u = grpObj.userData;
+      if (u.wingwallId === wingwallId) {
+        u.mat.transparent = false;
+        u.mat.opacity = 1.0;
+        if (u.mark !== this.selectedRebarMark) {
+          u.mat.color.setHex(u.baseColor);
+        }
+      } else {
+        u.mat.transparent = true;
+        u.mat.opacity = 0.12;
+        u.mat.color.setHex(0x64748b);
+      }
+    }
+  }
+
+  clearRebarSelection() {
+    this.selectedRebarMark = null;
+    this.clearRebarLabels();
+    if (this.selectedWingwallFocus) {
+      this.focusWingwall(this.selectedWingwallFocus);
+    } else {
+      this.focusWingwall('CULVERT');
     }
   }
 
@@ -607,6 +719,21 @@ class Viewer3D {
           return;
         }
       }
+
+      // Check structure hit in Step 3
+      const meshes = Object.values(this.meshes).map(m => m.group.userData.mesh);
+      const intersects = this.raycaster.intersectObjects(meshes);
+      if (intersects.length > 0) {
+        const hitMesh = intersects[0].object;
+        const objId = hitMesh.userData.id;
+        this.focusWingwall(objId);
+        if (this.onSelectWingwall) this.onSelectWingwall(objId);
+      } else {
+        // Clicked background: clear rebar selection and close rebar detail
+        this.clearRebarSelection();
+        if (this.onDeselectRebar) this.onDeselectRebar();
+      }
+      return;
     }
 
     const meshes = Object.values(this.meshes).map(m => m.group.userData.mesh);
