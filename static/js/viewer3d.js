@@ -10,6 +10,8 @@ class Viewer3D {
     this.labelSprites = [];
     this.rebarLabelSprites = [];
     this.wingwallNameSprites = [];
+    this.dimensionGroup = null;
+    this.dimensionSprites = [];
     this.displayMode = 'solid'; // 'solid', 'wireframe', 'transparent'
     this.stepMode = 2; // 2: Exterior only, 3: Exterior (ghosted) + 3D Rebars
     this.selectedObjectId = null;
@@ -79,6 +81,11 @@ class Viewer3D {
     this.rebarGroupRoot = new THREE.Group();
     this.scene.add(this.rebarGroupRoot);
 
+    // Dimension group for Step 2 selected wingwall measurements
+    this.dimensionGroup = new THREE.Group();
+    this.scene.add(this.dimensionGroup);
+    this.dimensionSprites = [];
+
     // Ground Grid & Axes
     this.setupGridAndAxes();
 
@@ -115,6 +122,7 @@ class Viewer3D {
     this.meshes = {};
     this.clearSectionMarkers();
     this.clearWingwallNameSprites();
+    this.clearDimensionAnnotations();
 
     const objects = modelData.objects || {};
     const botEl = objects.culvert?.dimensions?.bot_el ?? 33.404;
@@ -325,6 +333,9 @@ class Viewer3D {
 
   setStepMode(stepNumber) {
     this.stepMode = stepNumber;
+    if (stepNumber === 3) {
+      this.clearDimensionAnnotations();
+    }
     this.applyStepVisualState();
   }
 
@@ -644,7 +655,7 @@ class Viewer3D {
       const center = new THREE.Vector3();
       box.getCenter(center);
       const sprite = this.createTextSprite(item.name, item.color);
-      sprite.position.set(center.x, center.y, box.max.z + 0.65);
+      sprite.position.set(center.x, center.y, box.max.z + 1.25);
       sprite.userData.wingwallId = item.id;
       sprite.visible = false;
       this.scene.add(sprite);
@@ -680,18 +691,270 @@ class Viewer3D {
   selectObject(objectId) {
     this.selectedObjectId = objectId;
     if (this.stepMode === 3) return;
-    for (const id in this.meshes) {
-      const m = this.meshes[id];
-      const mat = m.group.userData.mat;
-      if (id === objectId) {
-        mat.emissive = new THREE.Color(0x2563eb);
-        mat.emissiveIntensity = 0.45;
-      } else {
-        mat.emissive = new THREE.Color(0x000000);
+
+    const isCulvert = (!objectId || objectId === 'CULVERT');
+
+    if (isCulvert) {
+      // 2.1 암거 본체 선택: 메인 화면에 암거 본체 및 모든 구조물을 정상 진하게 표시
+      this.clearDimensionAnnotations();
+      for (const id in this.meshes) {
+        const m = this.meshes[id];
+        const mat = m.group.userData.mat;
+        const edgesMat = m.group.userData.edgesMat;
+
+        mat.transparent = false;
+        mat.opacity = 1.0;
+        mat.depthWrite = true;
+        mat.color.setHex(m.baseColor);
+        mat.emissive.setHex(0x000000);
         mat.emissiveIntensity = 0;
+
+        if (edgesMat) {
+          edgesMat.transparent = true;
+          edgesMat.opacity = 0.35;
+        }
+      }
+    } else {
+      // 2.2 날개벽 선택: 선택된 날개벽은 진하게, 나머지 구조물은 흐리게 표시
+      this.clearDimensionAnnotations();
+      for (const id in this.meshes) {
+        const m = this.meshes[id];
+        const mat = m.group.userData.mat;
+        const edgesMat = m.group.userData.edgesMat;
+
+        if (id === objectId) {
+          // 선택된 날개벽: 진하게 선명하게 강조
+          mat.transparent = false;
+          mat.opacity = 1.0;
+          mat.depthWrite = true;
+          mat.color.setHex(m.baseColor);
+          mat.emissive.setHex((id === 'WW_END_LEFT' || id === 'ww_left') ? 0x0284c7 : 0xd97706);
+          mat.emissiveIntensity = 0.30;
+
+          if (edgesMat) {
+            edgesMat.transparent = false;
+            edgesMat.opacity = 0.85;
+          }
+        } else {
+          // 나머지 구조물: 흐리게 (위치와 형상은 파악 가능한 반투명)
+          mat.transparent = true;
+          mat.opacity = 0.18;
+          mat.depthWrite = false;
+          mat.color.setHex(0x64748b);
+          mat.emissive.setHex(0x000000);
+          mat.emissiveIntensity = 0;
+
+          if (edgesMat) {
+            edgesMat.transparent = true;
+            edgesMat.opacity = 0.18;
+          }
+        }
+      }
+
+      // 3. 선택된 날개벽의 주요 치수(시작단면 높이, 종점단면 높이, 날개벽 연장) 표시
+      this.showWingwallDimensions(objectId);
+    }
+
+    this.updateWingwallNameSpritesVisibility();
+  }
+
+  // Requirement 3: 선택된 날개벽 치수(시작단면 높이, 종점단면 높이, 날개벽 연장) 3D 치수선 및 라벨 생성
+  showWingwallDimensions(wingwallId) {
+    this.clearDimensionAnnotations();
+    if (!wingwallId || wingwallId === 'CULVERT') return;
+
+    const objects = this.modelData?.objects || {};
+    const isLeft = (wingwallId === 'WW_END_LEFT' || wingwallId === 'ww_left' || wingwallId === 'ww_end_left');
+
+    const wwData = isLeft
+      ? (objects.ww_end_left || objects.ww_left)
+      : (objects.ww_end_right || objects.ww_right);
+
+    const dim = wwData?.dimensions || {};
+    const lengthVal = dim.length ?? (isLeft ? 4.35 : 5.40);
+    const hStartVal = dim.total_height_start ?? 3.70;
+    const hEndVal = dim.total_height_end ?? 1.50;
+
+    const colorHex = isLeft ? 0x38bdf8 : 0xfbbf24;
+
+    let pStartBot, pStartTop, pEndBot, pEndTop;
+    const sec = wwData?.sections_3d || {};
+
+    if (isLeft) {
+      const secA = sec['A-A'];
+      const secB = sec['B-B'];
+      if (secA && secA.length >= 6) {
+        pStartBot = new THREE.Vector3(secA[5][0], secA[5][1], secA[0][2]);
+        pStartTop = new THREE.Vector3(secA[5][0], secA[5][1], secA[4][2]);
+      } else {
+        pStartBot = new THREE.Vector3(15.731, 42.650, 33.404);
+        pStartTop = new THREE.Vector3(15.731, 42.650, 37.104);
+      }
+      if (secB && secB.length >= 6) {
+        pEndBot = new THREE.Vector3(secB[5][0], secB[5][1], secB[0][2]);
+        pEndTop = new THREE.Vector3(secB[5][0], secB[5][1], secB[4][2]);
+      } else {
+        pEndBot = new THREE.Vector3(18.759, 45.773, 33.523);
+        pEndTop = new THREE.Vector3(18.759, 45.773, 35.023);
+      }
+    } else {
+      const secC = sec['C-C'];
+      const secD = sec['D-D'];
+      if (secC && secC.length >= 6) {
+        pStartBot = new THREE.Vector3(secC[5][0], secC[5][1], secC[0][2]);
+        pStartTop = new THREE.Vector3(secC[5][0], secC[5][1], secC[4][2]);
+      } else {
+        pStartBot = new THREE.Vector3(16.287, 40.650, 33.404);
+        pStartTop = new THREE.Vector3(16.287, 40.650, 37.104);
+      }
+      if (secD && secD.length >= 6) {
+        pEndBot = new THREE.Vector3(secD[5][0], secD[5][1], secD[0][2]);
+        pEndTop = new THREE.Vector3(secD[5][0], secD[5][1], secD[4][2]);
+      } else {
+        pEndBot = new THREE.Vector3(21.004, 38.022, 33.523);
+        pEndTop = new THREE.Vector3(21.004, 38.022, 35.023);
       }
     }
-    this.updateWingwallNameSpritesVisibility();
+
+    // 벽체 연장 축 (XY 평면)
+    const vWall = new THREE.Vector3(pEndTop.x - pStartTop.x, pEndTop.y - pStartTop.y, 0);
+    const uWall = vWall.clone().normalize();
+
+    // 벽체 외측 법선 벡터 (XY 평면)
+    const nWall = isLeft
+      ? new THREE.Vector3(-uWall.y, uWall.x, 0).normalize()
+      : new THREE.Vector3(uWall.y, -uWall.x, 0).normalize();
+
+    // 1. 시작단면 높이 치수선 및 라벨 (H = 3.70m)
+    this.createDimension3D(
+      pStartBot,
+      pStartTop,
+      nWall,
+      0.55,
+      `시작단면 H = ${hStartVal.toFixed(2)}m`,
+      colorHex
+    );
+
+    // 2. 종점단면 높이 치수선 및 라벨 (H = 1.50m)
+    this.createDimension3D(
+      pEndBot,
+      pEndTop,
+      uWall,
+      0.55,
+      `종점단면 H = ${hEndVal.toFixed(2)}m`,
+      colorHex
+    );
+
+    // 3. 날개벽 연장 치수선 및 라벨 (L = 4.35m / 5.40m)
+    this.createDimension3D(
+      pStartTop,
+      pEndTop,
+      new THREE.Vector3(0, 0, 1),
+      0.65,
+      `날개벽 연장 L = ${lengthVal.toFixed(2)}m`,
+      colorHex
+    );
+  }
+
+  createDimension3D(p1, p2, offsetDir, offsetDist, text, colorHex) {
+    const off = offsetDir.clone().normalize().multiplyScalar(offsetDist);
+    const d1 = p1.clone().add(off);
+    const d2 = p2.clone().add(off);
+
+    const linePoints = [];
+
+    // 보조선 (Extension Lines from geometry to dimension line)
+    const extOver = offsetDir.clone().normalize().multiplyScalar(0.15);
+    linePoints.push(p1.clone(), d1.clone().add(extOver));
+    linePoints.push(p2.clone(), d2.clone().add(extOver));
+
+    // 치수선 (Main Dimension Line)
+    linePoints.push(d1.clone(), d2.clone());
+
+    // 끝단 틱 표시 (End Ticks: 시작점과 끝점 및 측정 방향 표시)
+    const dimDir = new THREE.Vector3().subVectors(d2, d1).normalize();
+    let tickDir = new THREE.Vector3().crossVectors(dimDir, offsetDir).normalize();
+    if (tickDir.lengthSq() < 0.01) {
+      tickDir = new THREE.Vector3(0, 0, 1);
+    }
+    const tickLen = 0.14;
+    linePoints.push(d1.clone().addScaledVector(tickDir, tickLen), d1.clone().addScaledVector(tickDir, -tickLen));
+    linePoints.push(d2.clone().addScaledVector(tickDir, tickLen), d2.clone().addScaledVector(tickDir, -tickLen));
+
+    const geom = new THREE.BufferGeometry().setFromPoints(linePoints);
+    const mat = new THREE.LineBasicMaterial({
+      color: colorHex,
+      linewidth: 2,
+      depthTest: false,
+      transparent: true,
+      opacity: 0.95
+    });
+    const lineSegs = new THREE.LineSegments(geom, mat);
+    lineSegs.renderOrder = 999;
+    this.dimensionGroup.add(lineSegs);
+
+    // 치수값 텍스트 라벨 (중앙에 가독성 높게 배치)
+    const mid = new THREE.Vector3().addVectors(d1, d2).multiplyScalar(0.5);
+    const spritePos = mid.clone().addScaledVector(offsetDir.clone().normalize(), 0.35);
+
+    const sprite = this.createDimensionTextSprite(text, colorHex);
+    sprite.position.copy(spritePos);
+    sprite.renderOrder = 1000;
+    this.scene.add(sprite);
+    this.dimensionSprites.push(sprite);
+  }
+
+  createDimensionTextSprite(text, colorHex) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 340;
+    canvas.height = 68;
+    const ctx = canvas.getContext('2d');
+
+    // 반투명 다크 배경 필
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+    ctx.roundRect ? ctx.roundRect(4, 4, 332, 60, 8) : ctx.fillRect(4, 4, 332, 60);
+    ctx.fill();
+
+    // 부재 강조 색상 테두리
+    ctx.strokeStyle = '#' + new THREE.Color(colorHex).getHexString();
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // 선명한 화이트 볼드 텍스트
+    ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 170, 34);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    const spriteMat = new THREE.SpriteMaterial({
+      map: texture,
+      depthTest: false,
+      transparent: true
+    });
+    const sprite = new THREE.Sprite(spriteMat);
+    sprite.scale.set(3.4, 0.68, 1);
+    sprite.userData.aspect = 340 / 68;
+    return sprite;
+  }
+
+  clearDimensionAnnotations() {
+    if (this.dimensionGroup) {
+      while (this.dimensionGroup.children.length > 0) {
+        const obj = this.dimensionGroup.children[0];
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+        this.dimensionGroup.remove(obj);
+      }
+    }
+    for (const sp of this.dimensionSprites) {
+      this.scene.remove(sp);
+      if (sp.material?.map) sp.material.map.dispose();
+      if (sp.material) sp.material.dispose();
+    }
+    this.dimensionSprites = [];
   }
 
   toggleObjectVisibility(objectId, visible) {
@@ -837,8 +1100,8 @@ class Viewer3D {
     requestAnimationFrame(() => this.animate());
     this.controls.update();
 
-    // Requirement 3.3: 줌 확대/축소 시에도 3D 텍스트 크기 일정 유지 (Screen-space constant size)
-    const sprites = [...this.rebarLabelSprites, ...this.labelSprites, ...this.wingwallNameSprites];
+    // Requirement 2.3 & 3.3: 줌 확대/축소 시에도 3D 텍스트 크기 일정 유지 (Screen-space constant size)
+    const sprites = [...this.rebarLabelSprites, ...this.labelSprites, ...this.wingwallNameSprites, ...this.dimensionSprites];
     for (const sp of sprites) {
       if (sp && sp.visible) {
         const dist = this.camera.position.distanceTo(sp.position);
