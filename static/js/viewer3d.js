@@ -336,12 +336,12 @@ class Viewer3D {
       this.rebarGroupRoot.visible = isStep3;
     }
 
-    // Section markers only in Step 2
+    // Section markers and labels hidden to keep 3D model clean (Requirement 2.2.2 & 2.2.3)
     for (const line of this.sectionMarkers) {
-      line.visible = !isStep3;
+      line.visible = false;
     }
     for (const sp of this.labelSprites) {
-      sp.visible = !isStep3;
+      sp.visible = false;
     }
     for (const sp of this.rebarLabelSprites) {
       sp.visible = isStep3;
@@ -575,44 +575,17 @@ class Viewer3D {
       points.push(points[0].clone());
 
       const geom = new THREE.BufferGeometry().setFromPoints(points);
-      const mat = new THREE.LineBasicMaterial({ color: s.color, linewidth: 3 });
+      const mat = new THREE.LineBasicMaterial({ color: s.color, linewidth: 2 });
       const line = new THREE.Line(geom, mat);
+      line.visible = false;
       this.scene.add(line);
       this.sectionMarkers.push(line);
-
-      const topPt = points[4];
-      if (topPt) {
-        const sprite = this.createTextSprite(s.name, s.color);
-        sprite.position.set(topPt.x, topPt.y, topPt.z + 0.6);
-        this.scene.add(sprite);
-        this.labelSprites.push(sprite);
-      }
+      // Requirement 2.2.3: 단면 0-0 텍스트 표기 삭제 (스프라이트 미생성)
     }
   }
 
   addAnnotations(objects) {
-    const wwL = objects.ww_left;
-    const wwR = objects.ww_right;
-    if (!wwL || !wwR) return;
-
-    const ptA = wwL.sections_3d?.['A-A']?.[5] || [15.725, 42.650, wwL.dimensions.top_el_start];
-    const ptB = wwL.sections_3d?.['B-B']?.[5] || [18.75, 45.77, wwL.dimensions.top_el_end];
-    const ptD = wwR.sections_3d?.['D-D']?.[5] || [21.01, 38.02, wwR.dimensions.top_el_end];
-    const stName = this.modelData?.station || '종점부';
-
-    const elMarkers = [
-      { text: `EL. ${wwL.dimensions.top_el_start.toFixed(3)} (암거 접합부)`, pos: ptA, color: 0x38bdf8 },
-      { text: `EL. ${wwL.dimensions.top_el_end.toFixed(3)} (좌 말단 L=${wwL.dimensions.length}m)`, pos: ptB, color: 0x38bdf8 },
-      { text: `EL. ${wwR.dimensions.top_el_end.toFixed(3)} (우 말단 L=${wwR.dimensions.length}m)`, pos: ptD, color: 0xfbbf24 },
-      { text: `${stName} (종점부)`, pos: [16.0, 41.65, wwL.dimensions.top_el_start + 0.5], color: 0xffffff }
-    ];
-
-    for (const m of elMarkers) {
-      const sprite = this.createTextSprite(m.text, m.color);
-      sprite.position.set(m.pos[0], m.pos[1], m.pos[2] + 0.4);
-      this.scene.add(sprite);
-      this.labelSprites.push(sprite);
-    }
+    // Requirement 2.2.2: 암거본체 선택 시 날개벽 구조물 이름만 표출 (불필요한 EL/스테이션 텍스트 미생성)
   }
 
   createTextSprite(text, colorHex) {
@@ -687,18 +660,19 @@ class Viewer3D {
   }
 
   updateWingwallNameSpritesVisibility() {
-    if (this.stepMode !== 3) {
+    if (this.stepMode !== 2 && this.stepMode !== 3) {
       for (const sp of this.wingwallNameSprites) sp.visible = false;
       return;
     }
-    const isCulvert = (!this.selectedWingwallFocus || this.selectedWingwallFocus === 'CULVERT');
+    const currentFocus = (this.stepMode === 3) ? this.selectedWingwallFocus : this.selectedObjectId;
+    const isCulvert = (!currentFocus || currentFocus === 'CULVERT');
     for (const sp of this.wingwallNameSprites) {
       if (isCulvert) {
-        // 암거본체 선택 시 날개벽 구조물의 이름만 표시 (Requirement 3.2.2)
+        // 암거본체 선택 시 날개벽 구조물의 이름만 표시 (Requirement 2.2.2 & 3.2.2)
         sp.visible = true;
       } else {
         // 특정 날개벽 선택 시 해당 날개벽 이름만 표시
-        sp.visible = (sp.userData.wingwallId === this.selectedWingwallFocus);
+        sp.visible = (sp.userData.wingwallId === currentFocus);
       }
     }
   }
@@ -717,6 +691,7 @@ class Viewer3D {
         mat.emissiveIntensity = 0;
       }
     }
+    this.updateWingwallNameSpritesVisibility();
   }
 
   toggleObjectVisibility(objectId, visible) {
@@ -748,18 +723,34 @@ class Viewer3D {
     }
   }
 
-  fitView() {
+  // Requirement 2.4: 3D 모델이 메인 화면 표시 영역의 약 80%를 차지하도록 초기 표시 크기(카메라 거리) 조정
+  fitView(coverage = 0.80) {
     const box = new THREE.Box3();
     for (const id in this.meshes) {
-      box.expandByObject(this.meshes[id].group);
+      if (this.meshes[id] && this.meshes[id].group) {
+        box.expandByObject(this.meshes[id].group);
+      }
     }
     if (box.isEmpty()) return;
     const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z);
+    const sphere = box.getBoundingSphere(new THREE.Sphere());
+    const radius = Math.max(sphere.radius, 1.0);
+
+    const fov = this.camera.fov * (Math.PI / 180);
+    const aspect = this.camera.aspect || ((this.container && this.container.clientHeight) ? (this.container.clientWidth / this.container.clientHeight) : 1.6);
+
+    const halfFovV = fov / 2;
+    const halfFovH = Math.atan(Math.tan(halfFovV) * aspect);
+    const limitingHalfFov = Math.min(halfFovV, halfFovH);
+
+    // 거리 산출: 바운딩 구가 뷰포트의 제한 치수 대비 약 80%를 차지하도록 배치
+    const targetDist = (radius / coverage) / Math.sin(limitingHalfFov);
+
+    const dir = new THREE.Vector3(1.0, -1.0, 0.78).normalize();
+    const camPos = center.clone().add(dir.multiplyScalar(targetDist));
 
     this.controls.target.copy(center);
-    this.camera.position.set(center.x + maxDim * 1.35, center.y - maxDim * 1.35, center.z + maxDim * 1.05);
+    this.camera.position.copy(camPos);
     this.camera.lookAt(center);
     this.controls.update();
   }

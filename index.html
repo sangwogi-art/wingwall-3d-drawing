@@ -137,25 +137,13 @@
         </div>
 
         <div class="step2-content-simple" style="gap:10px;">
-          <!-- 2.1 적용 일반도 정보 & 체적 한눈에 보기 요약 바 -->
-          <div id="step2-general-dwg-card"></div>
-
-          <!-- 2.2 평면도 암거·날개벽 판별 현황 (심플 미니 매트릭스) -->
-          <div class="panel-section" style="margin-bottom:0; padding:10px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-              <h3 style="margin:0; font-size:12px;">평면도 부재 판별</h3>
-              <span class="badge" id="step2-detection-badge" style="background:rgba(16,185,129,0.18); color:#34d399;">판별 완료</span>
-            </div>
-            <div id="step2-detection-card"></div>
-          </div>
-
-          <!-- 2.3 생성된 3D 구조물 목록 -->
+          <!-- 2.1 3D 구조물 선택 패널 (암거 및 실제 날개벽 2개소 - Requirement 1.1) -->
           <div class="panel-section" style="flex:1; display:flex; flex-direction:column; min-height:0; margin-bottom:0; padding:10px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-              <h3 style="margin:0; font-size:12px;">3D 구조물 목록</h3>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <h3 style="margin:0; font-size:13px; font-weight:700;">3D 구조물 선택</h3>
               <span style="font-size:10px; color:var(--text-muted);">부재 클릭 시 강조</span>
             </div>
-            <div id="step2-structures-list" class="step2-structures-scroll" style="gap:6px;"></div>
+            <div id="step2-structures-list" class="step2-structures-scroll" style="gap:7px;"></div>
           </div>
 
           <!-- 2.4 다음 단계(3단계: 철근 배근) 이동 버튼 -->

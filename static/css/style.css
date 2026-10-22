@@ -617,12 +617,15 @@ header {
   gap: 8px;
 }
 
+/* 1.2: 2단계 3D 구조물 선택 영역 날개벽 등 텍스트 크기 1.5배 확대 */
 .struct-card-step2-title {
-  font-size: 12px;
+  font-size: 17.5px !important;
   font-weight: 700;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
 }
 
 .struct-card-step2-tag {

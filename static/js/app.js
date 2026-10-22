@@ -453,9 +453,10 @@ class WingwallApp {
       await this.recalculateModel();
 
       this.viewer3d.setStepMode(2);
-      this.viewer3d.fitView();
+      this.viewer3d.fitView(0.80);
       this.renderStep2Sidebar();
-      this.selectObject(this.selectedObject || 'WW_END_LEFT');
+      // Requirement 2.2.1: 2단계 진입 시 기본 선택 구조물은 ‘암거본체’로 설정
+      this.selectObject('CULVERT');
     } else if (stepNum === 3) {
       // Step 3 is exclusively 3D rebar model view (세로 2단: 좌측 구조물 선택 + 우측 3D 뷰어 & HUD)
       this.setViewMode('3d');
@@ -513,29 +514,12 @@ class WingwallApp {
     const el = document.getElementById('overlay-3d-legend');
     if (!el) return;
 
-    const lLen = this.modelData?.objects?.ww_left?.dimensions?.length ?? this.params.left.length;
-    const rLen = this.modelData?.objects?.ww_right?.dimensions?.length ?? this.params.right.length;
-
-    if (this.currentStep === 3) {
-      // Requirement 3.1.1 & 3.1.2: 3단계에서 불필요한 안내 문구 및 텍스트 완전 삭제
+    if (this.currentStep === 2 || this.currentStep === 3) {
+      // Requirement 2.1 & 3.1: 2단계 및 3단계에서 불필요한 안내 문구 및 텍스트 완전 삭제
       el.innerHTML = '';
       return;
     } else {
-      const genDwgs = this.getGeneralDrawings();
-      const genName = genDwgs.length > 0 ? genDwgs.map(d => d.fileName).join(', ') : '선택된 일반도 없음';
-      el.innerHTML = `
-        <div class="overlay-chip" style="border-color:rgba(56,189,248,0.5);">
-          <strong style="color:#38bdf8;">[2단계: 일반도 전용 외형 모델]</strong> ${genName}
-        </div>
-        <div class="overlay-chip">
-          <span style="color:#38bdf8;">■</span> 좌측 날개벽(${Number(lLen).toFixed(2)}m) &nbsp;
-          <span style="color:#fbbf24;">■</span> 우측 날개벽(${Number(rLen).toFixed(2)}m) &nbsp;
-          <span style="color:#9ca3af;">■</span> 암거 본체 (배근도 제외)
-        </div>
-        <div class="overlay-chip" style="font-size:10px; color:#94a3b8;">
-          좌클릭: 회전 | 우클릭: 이동 | 휠: 줌 | 부재 클릭: 외형 제원 확인 및 3D 강조
-        </div>
-      `;
+      el.innerHTML = '';
     }
   }
 
@@ -555,9 +539,9 @@ class WingwallApp {
         targetDrawings = this.drawings;
       }
     } else if (this.currentStep === 2) {
-      const gen = this.getGeneralDrawings();
-      stepBadgeHtml = `<span class="dwg-type-badge type-general">2단계: 일반도 전용</span> <span>외형 모델 (${gen.length}종)</span>`;
-      targetDrawings = gen;
+      // Requirement 2.1.1: 메인창 상단에 표시되는 불러온 도면명과 ‘[2단계: 일반도 전용 외형 모델]’ 문구 삭제
+      stepBadgeHtml = '';
+      targetDrawings = [];
     } else {
       // Requirement 3.1.1: '[3단계: 배근도 기반 3D 철근배근]' 문구 삭제
       stepBadgeHtml = '';
@@ -566,7 +550,7 @@ class WingwallApp {
 
     ind.innerHTML = stepBadgeHtml;
     tabsContainer.innerHTML = '';
-    tabsContainer.style.display = (this.currentStep === 3) ? 'none' : 'flex';
+    tabsContainer.style.display = (this.currentStep === 1) ? 'flex' : 'none';
 
     for (const d of targetDrawings) {
       const btn = document.createElement('button');
@@ -829,48 +813,10 @@ class WingwallApp {
 
   // ==================== STEP 2 RENDERERS (일반도 전용 3D 외형 모델링) ====================
   renderStep2Sidebar() {
-    const genDwgs = this.getGeneralDrawings();
-
-    // 1. 적용 일반도 정보 & 체적 요약 카드
-    const activeGen = genDwgs.find(d => d.id === this.activeDrawingId) || genDwgs[0] || this.drawingData;
-    const genCard = document.getElementById('step2-general-dwg-card');
-    if (genCard) {
-      if (!activeGen) {
-        genCard.innerHTML = `
-          <div style="padding:10px; background:rgba(239,68,68,0.1); border:1px solid #ef4444; border-radius:6px; font-size:11px; color:#fca5a5; text-align:center;">
-            ⚠ 불러온 일반도가 없습니다.
-            <button class="btn btn-sm" style="margin-top:6px; width:100%; justify-content:center;" onclick="window.app.setStep(1)">1단계에서 도면 불러오기</button>
-          </div>
-        `;
-      } else {
-        const st = this.modelData?.station || this.params?.station || activeGen.titleBlock?.subTitle || '수로암거';
-        const totVol = this.modelData?.summary?.total_volume || 0;
-        const wwCount = (this.modelData?.objects?.wingwalls || []).length;
-
-        genCard.innerHTML = `
-          <div style="background:var(--bg-primary); border:1px solid var(--border-color); border-radius:6px; padding:8px 10px; font-size:11px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-              <span style="font-weight:700; color:#38bdf8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px;" title="${activeGen.fileName}">
-                📐 ${activeGen.fileName}
-              </span>
-              <span class="badge" style="background:rgba(56,189,248,0.15); color:#38bdf8; font-size:10px;">일반도</span>
-            </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; color:var(--text-secondary); font-size:10.5px;">
-              <span>${st} (날개벽 <strong>${wwCount}개소</strong>)</span>
-              <span>총 체적: <strong style="color:#38bdf8; font-size:11.5px;">${totVol} m³</strong></span>
-            </div>
-          </div>
-        `;
-      }
-    }
-
-    // 2. 평면도 암거 및 날개벽 위치 판별 현황 카드 (심플)
-    this.renderStep2DetectionCard(activeGen);
-
-    // 3. 외형 모델링 구조물 목록 (심플)
+    // Requirement 1.1: 좌측 바에서 '적용 일반도' 및 '평면도 부재 판별' 테이블 항목 삭제
     this.renderStep2StructuresList();
 
-    // 4. Step 3 이동 버튼 이벤트 연결
+    // Step 3 이동 버튼 이벤트 연결
     document.getElementById('btn-goto-step3')?.addEventListener('click', () => {
       this.setStep(3);
     });
@@ -1008,9 +954,10 @@ class WingwallApp {
 
     for (const ww of wwList) {
       const c = colorMap[ww.id] || '#38bdf8';
+      const cleanName = (ww.id === 'WW_END_LEFT') ? '종점부 좌측 날개벽' : ((ww.id === 'WW_END_RIGHT') ? '종점부 우측 날개벽' : ww.name);
       items.push({
         id: ww.id,
-        name: ww.name,
+        name: cleanName,
         tag: `L=${ww.dimensions.length.toFixed(2)}m (${ww.dimensions.flare_angle.toFixed(0)}°)`,
         color: c,
         info: `H=${(ww.dimensions.total_height_start || 3.3).toFixed(2)}~${(ww.dimensions.total_height_end || 1.5).toFixed(2)}m · B=${(ww.dimensions.footing_width_start || 2.2).toFixed(2)}~${(ww.dimensions.footing_width_end || 1.5).toFixed(2)}m · ${ww.volume} m³`
@@ -1029,19 +976,20 @@ class WingwallApp {
       const card = document.createElement('div');
       card.className = `struct-card-step2 ${isSel ? 'selected' : ''}`;
       card.id = `step2-struct-${s.id}`;
-      card.style.padding = '7px 9px';
-      card.style.gap = '3px';
+      card.style.padding = '10px 12px';
+      card.style.gap = '5px';
 
+      // 1.2: 1.5배 확대 폰트 크기 적용 (.struct-card-step2-title: 17.5px)
       card.innerHTML = `
         <div class="struct-card-step2-row1">
-          <div class="struct-card-step2-title" style="font-size:11.5px;">
+          <div class="struct-card-step2-title">
             <input type="checkbox" checked id="vis-chk-${s.id}" title="3D 표시/숨김" style="cursor:pointer; margin:0;">
             <span style="color:${s.color};">■</span>
             <span>${s.name}</span>
           </div>
-          <span class="struct-card-step2-tag" style="border:1px solid ${s.color}40; color:${s.color}; font-size:9.5px; padding:1px 5px;">${s.tag}</span>
+          <span class="struct-card-step2-tag" style="border:1px solid ${s.color}40; color:${s.color}; font-size:10px; padding:2px 6px;">${s.tag}</span>
         </div>
-        <div style="font-size:10px; color:var(--text-secondary); margin-left:18px;">
+        <div style="font-size:11px; color:var(--text-secondary); margin-left:20px; line-height:1.4;">
           ${s.info}
         </div>
       `;
