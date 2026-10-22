@@ -35,42 +35,49 @@ body {
 
 /* Header */
 header {
-  height: 60px;
+  height: 70px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 14px;
-  gap: 10px;
+  padding: 0 16px;
+  gap: 12px;
   z-index: 100;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-shrink: 0;
 }
 
 .brand .logo-icon {
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  border-radius: 8px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: 15px;
+  font-size: 18px;
   color: white;
 }
 
 .brand h1 {
-  font-size: 14px;
+  font-size: 21px; /* 기존 14px 대비 1.5배 확대 */
   font-weight: 700;
   letter-spacing: -0.3px;
   color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.brand .header-subtitle {
+  font-size: 16.5px; /* 기존 11px 대비 1.5배 확대 */
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 
 .badge {
@@ -87,9 +94,9 @@ header {
 .workflow-stepper {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   background: var(--bg-primary);
-  padding: 4px 6px;
+  padding: 5px 8px;
   border-radius: 8px;
   border: 1px solid var(--border-color);
 }
@@ -97,8 +104,8 @@ header {
 .step-pill {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 10px;
+  gap: 10px;
+  padding: 6px 12px;
   border-radius: 6px;
   border: 1px solid transparent;
   background: transparent;
@@ -125,17 +132,18 @@ header {
 }
 
 .step-num {
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 15px; /* 기존 11px 대비 확대 */
   font-weight: 800;
   color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 .step-pill.active .step-num {
@@ -156,15 +164,15 @@ header {
 }
 
 .step-title {
-  font-size: 11px;
+  font-size: 16.5px; /* 기존 11px 대비 1.5배 확대 */
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.25;
 }
 
 .step-sub {
-  font-size: 9px;
+  font-size: 13.5px; /* 기존 9px 대비 1.5배 확대 */
   color: var(--text-muted);
-  margin-top: 1px;
+  margin-top: 2px;
 }
 
 .step-pill.active .step-sub {
@@ -177,8 +185,8 @@ header {
 
 .step-arrow {
   color: var(--text-muted);
-  font-size: 11px;
-  padding: 0 2px;
+  font-size: 16.5px; /* 기존 11px 대비 1.5배 확대 */
+  padding: 0 4px;
 }
 
 .header-tools {
